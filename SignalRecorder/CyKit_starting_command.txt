@@ -1,0 +1,1 @@
+python .\CyKIT.PY 127.0.0.1 54123 6  pywinusb

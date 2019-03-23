@@ -1,0 +1,3 @@
+[submodule "SignalRecorder/Image2EEG"]
+	path = SignalRecorder/Image2EEG
+	url = git@github.com:DACUS1995/Image2EEG.git
