@@ -36,9 +36,18 @@ def preprocess_file(file):
 def load_recording(path):
 	# fileContents = tf.io.read_file(path)
 	# splitedFileContents = tf.string_split([fileContents], os.linesep)
-	df = pd.read_csv(path)
+	df = pd.read_csv(path, skiprows=[0], header=None, names=["COUNTER", "INTERPOLATED", "F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2", "P8", "T8", "F8", "AF4", "FC6", "F4", "RAW_CQ", "GYROX"]) # "GYROY", "MARKER", "MARKER_HARDWARE", "SYNC", "TIME_STAMP_s", "TIME_STAMP_ms", "CQ_AF3", "CQ_F7", "CQ_F3", "CQ_FC5", "CQ_T7", "CQ_P7", "CQ_O1", "CQ_O2", "CQ_P8", "CQ_T8", "CQ_FC6", "CQ_F4", "CQ_F8", "CQ_AF4", "CQ_CMS", "CQ_DRL"])
+
+	df = df[:Config.RECORDING_NUM_SAMPLES]
 	recording = df.values
 	recording.dtype = np.float64
+
+	if recording.shape[0] < Config.RECORDING_NUM_SAMPLES:
+		recording = np.pad(recording, ((0, Config.RECORDING_NUM_SAMPLES - recording.shape[0]), (0, 0)), mode="edge")
+	
+	if recording.shape[0] != Config.RECORDING_NUM_SAMPLES:
+		raise Exception(f"Session number of samples is super not OK: [{recording.shape[0]}]")
+
 	return recording
 	# print(splitedFileContents)
 	# return preprocess_file(splitedFileContents)
@@ -53,8 +62,8 @@ print(recordings[0])
 
 dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 
-for n, recoding in enumerate(dataset_recordings.take(4)):
-	print(recording.shape)
+for n, recording in enumerate(dataset_recordings.take(1)):
+	print(recording[0])
 
 
 # mnist = tf.keras.datasets.mnist
