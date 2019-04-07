@@ -4,8 +4,11 @@ from typing import List, Tuple, Dict
 import os
 import pandas as pd
 import numpy as np
+import argparse
 
 from config import Config
+from models.model_1 import model as Model_1
+import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -18,9 +21,13 @@ print("Using eager execution: " + str(tf.executing_eagerly()))
 print("Using tensorflow version: " + str(tf.__version__) + "\n")
 
 
-def get_recording_files_paths() -> List[str]:
+def get_recording_files_paths(mode="training") -> List[str]:
 	# data_root = os.path.join(Config.RECORDING_PATH_ROOT, "\Park\Surdoiu_Tudor\Day_1")
-	data_root = Config.RECORDING_PATH_ROOT + "\Park\Surdoiu_Tudor\Day_1"
+	if mode == "training":
+		data_root = Config.RECORDING_PATH_ROOT + "\Park\Surdoiu_Tudor\Day_1"
+	if mode == "testing":
+		data_root = Config.RECORDING_PATH_ROOT + "\Park\Surdoiu_Tudor\Day_2"
+		
 	data_root = pathlib.Path(data_root)
 	all_recordings_path = list(data_root.glob('*'))
 
@@ -39,8 +46,10 @@ def load_recording(path):
 	df = pd.read_csv(path, skiprows=[0], header=None, names=["COUNTER", "INTERPOLATED", "F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2", "P8", "T8", "F8", "AF4", "FC6", "F4", "RAW_CQ", "GYROX"]) # "GYROY", "MARKER", "MARKER_HARDWARE", "SYNC", "TIME_STAMP_s", "TIME_STAMP_ms", "CQ_AF3", "CQ_F7", "CQ_F3", "CQ_FC5", "CQ_T7", "CQ_P7", "CQ_O1", "CQ_O2", "CQ_P8", "CQ_T8", "CQ_FC6", "CQ_F4", "CQ_F8", "CQ_AF4", "CQ_CMS", "CQ_DRL"])
 
 	df = df[:Config.RECORDING_NUM_SAMPLES]
+	df = df[Config.SENSORS_LABELS]
 	recording = df.values
 	recording.dtype = np.float64
+	recording = utils.normalization(recording)
 
 	if recording.shape[0] < Config.RECORDING_NUM_SAMPLES:
 		recording = np.pad(recording, ((0, Config.RECORDING_NUM_SAMPLES - recording.shape[0]), (0, 0)), mode="edge")
@@ -52,38 +61,82 @@ def load_recording(path):
 	# print(splitedFileContents)
 	# return preprocess_file(splitedFileContents)
 
-recordings = []
-dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
-# for n, file_path in enumerate(dateset_file_paths.take(4)):
-for n, file_path in enumerate(get_recording_files_paths()):
-	recordings.append(load_recording(file_path))
+def create_training_dataset(batch_size=5, shuffle=True):
+	recordings = []
+	labels = []
+	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
 
-print(recordings[0])
+	for n, file_path in enumerate(get_recording_files_paths()):
+		recordings.append(load_recording(file_path))
+		labels.append(0)
+		recordings.append(np.random.rand(Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS)))
+		labels.append(1)
 
-dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
+	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
+	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
+	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
+	# for n, (recording, label) in enumerate(dataset.take(1)):
+	# 	print(label)
 
-for n, recording in enumerate(dataset_recordings.take(1)):
-	print(recording[0])
+	#  !! Remeber to shuffle berfore using batch !!
+	if shuffle == True:
+		dataset = dataset.shuffle(2 * len(recordings))
+
+	dataset = dataset.batch(batch_size)
+	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
+	return dataset, len(recordings)
+
+def create_testing_dataset():
+	recordings = []
+	labels = []
+
+	for n, file_path in enumerate(get_recording_files_paths(mode="testing")):
+		recordings.append(load_recording(file_path))
+		labels.append(0)
+		recordings.append(np.random.rand(Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS)))
+		labels.append(1)
+
+	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
+	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
+	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
+	return dataset
 
 
-# mnist = tf.keras.datasets.mnist
+def train(model, epochs=5):
+	dataset, length = create_training_dataset(batch_size=10)
+	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	model.fit(train_dataset, epochs=epochs, validation_data=validation_dataset)
 
-# (x_train, y_train), (x_test, y_test) = mnist.load_data()
-# x_train, x_test = x_train / 255.0, x_test / 255.0
+	dataset_test = create_testing_dataset()
+	model.evaluate(dataset_test)
+	# for n, (recording, label) in enumerate(dataset):
+	# 	print(recording[0, 0])
 
-# model = tf.keras.models.Sequential([
-# 	tf.keras.layers.Flatten(input_shape=(28, 28)),
-# 	tf.keras.layers.Dense(128, activation='relu'),
-# 	tf.keras.layers.Dropout(0.2),
-# 	tf.keras.layers.Dense(10, activation='softmax')
-# ])
 
-# model.compile(
-# 	optimizer='adam',
-# 	loss='sparse_categorical_crossentropy',
-# 	metrics=['accuracy']
-# )
+def main(args):
+	model = None
+	if args.model == "model_1":
+		model = Model_1
 
-# model.fit(x_train, y_train, epochs=5)
+	callbacks = [
+		# Interrupt training if `val_loss` stops improving for over 2 epochs
+		tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss'),
+		tf.keras.callbacks.ModelCheckpoint("./", save_best_only=True, period=2)
+		# Write TensorBoard logs to `./logs` directory
+		# tf.keras.callbacks.TensorBoard(log_dir='./logs')
+	]
 
-# model.evaluate(x_test, y_test)
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
+	train(model, args.epochs)
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
+	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
+	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
+	args = parser.parse_args()
+	main(args)
