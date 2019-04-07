@@ -1,6 +1,11 @@
 import tensorflow as tf
 import pathlib
 from typing import List, Tuple, Dict 
+import os
+import pandas as pd
+import numpy as np
+
+from config import Config
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -12,8 +17,10 @@ except:
 print("Using eager execution: " + str(tf.executing_eagerly())) 
 print("Using tensorflow version: " + str(tf.__version__) + "\n")
 
-def get_recording_files_names() -> List[str]:
-	data_root = "D:\Storage\EEGRecordings\Park\Surdoiu_Tudor\Day_1" #TODO put this in a config file
+
+def get_recording_files_paths() -> List[str]:
+	# data_root = os.path.join(Config.RECORDING_PATH_ROOT, "\Park\Surdoiu_Tudor\Day_1")
+	data_root = Config.RECORDING_PATH_ROOT + "\Park\Surdoiu_Tudor\Day_1"
 	data_root = pathlib.Path(data_root)
 	all_recordings_path = list(data_root.glob('*'))
 
@@ -27,14 +34,29 @@ def preprocess_file(file):
 	return csv_file
 
 def load_recording(path):
-	file = tf.io.read_file(path)
-	return preprocess_file(file)
+	# fileContents = tf.io.read_file(path)
+	# splitedFileContents = tf.string_split([fileContents], os.linesep)
+	df = pd.read_csv(path)
+	recording = df.values
+	recording.dtype = np.float64
+	return recording
+	# print(splitedFileContents)
+	# return preprocess_file(splitedFileContents)
 
-dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_names())
-dataset_recordings = dateset_file_paths.map(load_recording, num_parallel_calls=AUTOTUNE)
+recordings = []
+dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
+# for n, file_path in enumerate(dateset_file_paths.take(4)):
+for n, file_path in enumerate(get_recording_files_paths()):
+	recordings.append(load_recording(file_path))
+
+print(recordings[0])
+
+dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 
 for n, recoding in enumerate(dataset_recordings.take(4)):
 	print(recording.shape)
+
+
 # mnist = tf.keras.datasets.mnist
 
 # (x_train, y_train), (x_test, y_test) = mnist.load_data()
