@@ -80,7 +80,7 @@ def create_training_dataset(batch_size=5, shuffle=True):
 
 	#  !! Remeber to shuffle berfore using batch !!
 	if shuffle == True:
-		dataset = dataset.shuffle(2 * len(recordings))
+		dataset = dataset.shuffle(len(recordings))
 
 	dataset = dataset.batch(batch_size)
 	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
@@ -99,14 +99,22 @@ def create_testing_dataset():
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
 	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
+	dataset = dataset.batch(1)
+	dataset = dataset.shuffle(len(recordings))
 	return dataset
 
 
-def train(model, epochs=5):
-	dataset, length = create_training_dataset(batch_size=10)
+def train(model, *, epochs=5, callbacks):
+	dataset, length = create_training_dataset(batch_size=5)
 	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
 	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
-	model.fit(train_dataset, epochs=epochs, validation_data=validation_dataset)
+
+	model.fit(
+		train_dataset, 
+		epochs=epochs, 
+		validation_data=validation_dataset,
+		callbacks=callbacks
+	)
 
 	dataset_test = create_testing_dataset()
 	model.evaluate(dataset_test)
@@ -119,10 +127,14 @@ def main(args):
 	if args.model == "model_1":
 		model = Model_1
 
+	model.summary()
+
+	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
+
 	callbacks = [
 		# Interrupt training if `val_loss` stops improving for over 2 epochs
 		tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss'),
-		tf.keras.callbacks.ModelCheckpoint("./", save_best_only=True, period=2)
+		tf.keras.callbacks.ModelCheckpoint(checkpoint_prefix, save_best_only=True, period=2)
 		# Write TensorBoard logs to `./logs` directory
 		# tf.keras.callbacks.TensorBoard(log_dir='./logs')
 	]
@@ -132,7 +144,7 @@ def main(args):
 		loss='sparse_categorical_crossentropy',
 		metrics=['accuracy']
 	)
-	train(model, args.epochs)
+	train(model=model, epochs=args.epochs, callbacks=callbacks)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
