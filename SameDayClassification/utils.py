@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+import librosa.display as display
 
 def normalization(data):
     if type(data) != np.ndarray:
@@ -22,4 +22,12 @@ def plot_recording(data: np.ndarray):
 	for idx in range(data.shape[1]):
 		plt.plot(data[:, idx])
 	plt.xticks(np.arange(data.shape[0]))
+	plt.show()
+
+def plot_mfcc(mfccs):
+	plt.figure(figsize=(10, 4))
+	display.specshow(mfccs, x_axis='time')
+	plt.colorbar()
+	plt.title('MFCC')
+	plt.tight_layout()
 	plt.show()
