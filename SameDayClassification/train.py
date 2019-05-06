@@ -64,7 +64,6 @@ def compute_mfcc(recording):
 
 	assert transformed_recording is not None
 	# print(transformed_recording.shape)
-
 	return transformed_recording
 
 def load_recording(path, use_mfcc=False):
@@ -149,6 +148,7 @@ def train(model, *, epochs=5, callbacks) -> None:
 
 	dataset_test = create_testing_dataset()
 	model.evaluate(dataset_test)
+	return model
 	# for n, (recording, label) in enumerate(dataset):
 	# 	print(recording[0, 0])
 
@@ -177,7 +177,10 @@ def main(args):
 		loss='sparse_categorical_crossentropy',
 		metrics=['accuracy']
 	)
-	train(model=model, epochs=args.epochs, callbacks=callbacks)
+	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks)
+	if args.save_model == True:
+		trained_model.save(f'{args.model}.h5')
+		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
