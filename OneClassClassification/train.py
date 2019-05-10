@@ -69,14 +69,17 @@ def create_training_dataset(batch_size=5, shuffle=True):
 	for n, file_path in enumerate(get_recording_files_paths()):
 		recordings.append(load_recording(file_path))
 		labels.append(0)
-		recordings.append(np.random.rand(Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS)))
-		labels.append(1)
+		# recordings.append(np.random.rand(Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS)))
+		# labels.append(1)
 
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
 	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
+
 	# for n, (recording, label) in enumerate(dataset.take(1)):
-	# 	print(label)
+	# 	print(tf.math.reduce_max(recording, axis=0))
+	# 	print(tf.math.reduce_min(recording, axis=0))
+	# 	print(recording)
 
 	#  !! Remeber to shuffle berfore using batch !!
 	if shuffle == True:
