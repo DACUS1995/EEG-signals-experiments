@@ -7,9 +7,9 @@ import numpy as np
 import argparse
 import datetime
 import librosa
+import time
 
 from config import Config
-from models.model_1 import model as Model_1
 from models.model_mfcc import model as Model_mfcc
 import utils
 
@@ -88,19 +88,26 @@ def load_recording(path, use_mfcc=False):
 	# print(splitedFileContents)
 	# return preprocess_file(splitedFileContents)
 
+
+def load_and_process_img(path_to_img):
+	img = load_img(path_to_img)
+	img = tf.keras.applications.vgg19.preprocess_input(img)
+	return img
+
+
 def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	recordings = []
-	labels = []
+	images = []
 	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
 
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
 			recordings.append(load_recording(file_path, use_mfcc))
-			labels.append(n)
+			images.append(load_and_process_img('''TODO create list with the paths of images'''))
 
+	dataset_img = tf.data.Dataset.from_tensor_slices(labels)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
-	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
-	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
+	dataset = tf.data.Dataset.zip((dataset_img, dataset_recordings))
 
 	#  !! Remeber to shuffle berfore using batch !!
 	if shuffle == True:
@@ -132,11 +139,12 @@ def create_image_encoder(output_layer_name="block5_conv4", embedding_size=512):
 	image_model.trainable = False # !Maybe fine tune this!
 	
 	image_model_output = image_model.layers[-1].output
-	output = tf.keras.layers.Flatten()(image_model_output)
-	output = layers.Dense(embedding_size, activation='softmax')(output)
+	output = tf.squeeze(image_model_output, axis=[1, 2])
+	output = tf.keras.layers.Flatten()(output)
+	output = tf.keras.layers.Dense(embedding_size, activation='softmax')(output)
 
-	model = tf.keras.Model(inputs=vgg.input, outputs=output)
-	return
+	model = tf.keras.Model(inputs=image_model.input, outputs=output)
+	return model
 
 
 def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extractor):
@@ -155,25 +163,23 @@ def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extr
 	return loss, total_loss
 
 
-def train(model, *, epochs=5, callbacks) -> None:
+def train(model, *, epochs=5) -> None:
 	dataset, length = create_training_dataset(batch_size=5)
 	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
 	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	image_feature_extractor = create_image_encoder()
 	eeg_feature_extractor = model
+	optimizer = tf.keras.optimizers.Adam()
 
 	# Checkpoint setup
 	checkpoint_path = "./checkpoints/train"
-	ckpt = tf.train.Checkpoint(encoder=encoder, decoder=decoder, optimizer=optimizer)
+	ckpt = tf.train.Checkpoint(encoder=image_feature_extractor, decoder=eeg_feature_extractor, optimizer=optimizer)
 	ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
 	start_epoch = 0
 	if ckpt_manager.latest_checkpoint:
 		start_epoch = int(ckpt_manager.latest_checkpoint.split('-')[-1])
-
-	optimizer = tf.keras.optimizers.Adam()
-	loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
 
 	loss_plot = []
 
@@ -213,10 +219,18 @@ def train(model, *, epochs=5, callbacks) -> None:
 
 def main(args):
 	model = None
-	if args.model == "model_1":
-		model = Model_1
 	if args.model == "model_mfcc":
 		model = Model_mfcc
+
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
+
+	latest = tf.train.latest_checkpoint("./models/checkpoints_mfcc")
+	model.load_weights(latest)
+	model.trainable  = False
 
 	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
 	log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -230,7 +244,7 @@ def main(args):
 	# 	tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 	# ]
 
-	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks)
+	trained_model = train(model=model, epochs=args.epochs)
 	if args.save_model == True:
 		trained_model.save(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')
@@ -238,6 +252,7 @@ def main(args):
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
-	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
+	parser.add_argument("-m", "--model", type=str, default="model_mfcc", help="What model to use.")
+	parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save the model.")
 	args = parser.parse_args()
 	main(args)
