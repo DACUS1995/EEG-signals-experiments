@@ -89,6 +89,23 @@ def load_recording(path, use_mfcc=False):
 	# return preprocess_file(splitedFileContents)
 
 
+def load_img(path_to_img):
+	max_dim = 512
+	img = tf.io.read_file(path_to_img)
+	img = tf.image.decode_image(img, channels=3)
+	img = tf.image.convert_image_dtype(img, tf.float32)
+
+	shape = tf.cast(tf.shape(img)[:-1], tf.float32)
+	long_dim = max(shape)
+	scale = max_dim / long_dim
+
+	new_shape = tf.cast(shape * scale, tf.int32)
+
+	img = tf.image.resize(img, new_shape)
+	img = img[tf.newaxis, :]
+	return img
+
+
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
 	img = tf.keras.applications.vgg19.preprocess_input(img)
@@ -103,9 +120,11 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
 			recordings.append(load_recording(file_path, use_mfcc))
-			images.append(load_and_process_img('''TODO create list with the paths of images'''))
+			path_components = file_path.split("\\")
+			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
+			images.append(load_and_process_img(path_to_img))
 
-	dataset_img = tf.data.Dataset.from_tensor_slices(labels)
+	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 	dataset = tf.data.Dataset.zip((dataset_img, dataset_recordings))
 
@@ -149,7 +168,8 @@ def create_image_encoder(output_layer_name="block5_conv4", embedding_size=512):
 
 def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extractor):
 	loss = 0
-
+	img_tensor = tf.squeeze(img_tensor)
+	
 	with tf.GradientTape() as tape:
 		features_image = image_feature_extractor(img_tensor)
 		features_eeg = eeg_feature_extractor(eeg_signal)
@@ -169,7 +189,7 @@ def train(model, *, epochs=5) -> None:
 	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	image_feature_extractor = create_image_encoder()
-	eeg_feature_extractor = model
+	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
 	optimizer = tf.keras.optimizers.Adam()
 
 	# Checkpoint setup

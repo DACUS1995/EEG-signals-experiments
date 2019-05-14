@@ -25,7 +25,9 @@ class Model(tf.keras.Model):
 		self.norm5 = tf.keras.layers.BatchNormalization()
 
 		self.flatten = tf.keras.layers.Flatten()
-		self.d1 = tf.keras.layers.Dense(512, activation='softmax')
+		self.d1 = tf.keras.layers.Dense(512, activation='relu')
+		self.dropout = tf.keras.layers.Dropout(0.2)
+		self.d2 = tf.keras.layers.Dense(2, activation='softmax')
 
 	def call(self, x, training=False):
 		# out = self.reshape(x)
@@ -47,7 +49,9 @@ class Model(tf.keras.Model):
 
 		out = self.flatten(out)
 		out = self.d1(out)
-
+		if training:
+			out = self.dropout(out)
+		out = self.d2(out)
 		return out
 
 model = Model()
