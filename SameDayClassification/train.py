@@ -121,7 +121,7 @@ def create_testing_dataset(use_mfcc=True):
 	recordings = []
 	labels = []
 
-	for n, class_file_list in enumerate(get_recording_files_paths()):
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
 		for m, file_path in enumerate(class_file_list):
 			recordings.append(load_recording(file_path, use_mfcc))
 			labels.append(n)
@@ -136,8 +136,16 @@ def create_testing_dataset(use_mfcc=True):
 
 def train(model, *, epochs=5, callbacks) -> None:
 	dataset, length = create_training_dataset(batch_size=5)
-	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	dataset_test = create_testing_dataset()
+
+	# Use samples from the same session for validation
+	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+
+	# Use samples from different session for validation
+	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	train_dataset = dataset
 
 	model.fit(
 		train_dataset, 
@@ -146,7 +154,6 @@ def train(model, *, epochs=5, callbacks) -> None:
 		callbacks=callbacks
 	)
 
-	dataset_test = create_testing_dataset()
 	model.evaluate(dataset_test)
 	return model
 	# for n, (recording, label) in enumerate(dataset):
@@ -166,7 +173,7 @@ def main(args):
 
 	callbacks = [
 		# Interrupt training if `val_loss` stops improving for over 2 epochs
-		tf.keras.callbacks.EarlyStopping(patience=5, monitor='val_loss'),
+		# tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss'),
 		tf.keras.callbacks.ModelCheckpoint(checkpoint_prefix, save_best_only=True, period=2),
 		# Write TensorBoard logs to `./logs` directory
 		tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
@@ -178,13 +185,14 @@ def main(args):
 		metrics=['accuracy']
 	)
 	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks)
-	if args.save_model == True:
-		trained_model.save(f'{args.model}.h5')
+	# if args.save_model == True:
+	# 	trained_model.save_weights(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
-	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
+	parser.add_argument("-m", "--model", type=str, default="model_mfcc", help="What model to use.")
+	# parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save model.")
 	args = parser.parse_args()
 	main(args)
