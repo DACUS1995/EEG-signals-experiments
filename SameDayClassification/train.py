@@ -27,9 +27,9 @@ print("Using tensorflow version: " + str(tf.__version__) + "\n")
 def get_recording_files_paths(mode="training") -> List[List]:
 	# data_root = os.path.join(Config.RECORDING_PATH_ROOT, "\Park\Surdoiu_Tudor\Day_1")
 	if mode == "training":
-		data_root = Config.RECORDING_PATH_ROOT + "\\Session_1"
+		data_root = Config.RECORDING_PATH_ROOT + "\\train"
 	if mode == "testing":
-		data_root = Config.RECORDING_PATH_ROOT + "\\Session_2"
+		data_root = Config.RECORDING_PATH_ROOT + "\\test"
 
 	
 		
@@ -56,7 +56,7 @@ def compute_mfcc(recording):
 	transformed_recording = None
 
 	for i in range(recording.shape[1]):
-		current_channel = librosa.feature.mfcc(recording[:, i], sr=40, n_mfcc=10, hop_length=10, n_fft=40)
+		current_channel = librosa.feature.mfcc(recording[:, i], sr=160, n_mfcc=10, hop_length=10, n_fft=40)
 		if transformed_recording is None:
 			transformed_recording = current_channel
 		else:
@@ -139,13 +139,13 @@ def train(model, *, epochs=5, callbacks) -> None:
 	dataset_test = create_testing_dataset()
 
 	# Use samples from the same session for validation
-	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	# Use samples from different session for validation
-	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
-	train_dataset = dataset
+	# validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	# dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	# train_dataset = dataset
 
 	model.fit(
 		train_dataset, 
