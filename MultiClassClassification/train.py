@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import datetime
 import librosa
+import matplotlib.pyplot as plt
 
 from config import Config
 from models.model_1 import model as Model_1
@@ -56,7 +57,7 @@ def compute_mfcc(recording):
 	transformed_recording = None
 
 	for i in range(recording.shape[1]):
-		current_channel = librosa.feature.mfcc(recording[:, i], sr=160, n_mfcc=10, hop_length=10, n_fft=40)
+		current_channel = librosa.feature.mfcc(recording[:, i], sr=40, n_mfcc=10, hop_length=10, n_fft=40)
 		if transformed_recording is None:
 			transformed_recording = current_channel
 		else:
@@ -134,9 +135,9 @@ def create_testing_dataset(use_mfcc=True):
 	return dataset
 
 
-def train(model, *, epochs=5, callbacks) -> None:
-	dataset, length = create_training_dataset(batch_size=5)
-	dataset_test = create_testing_dataset()
+def train(model, *, epochs=5, callbacks, use_mfcc) -> None:
+	dataset, length = create_training_dataset(batch_size=5, use_mfcc=use_mfcc)
+	dataset_test = create_testing_dataset(use_mfcc)
 
 	# Use samples from the same session for validation
 	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
@@ -162,9 +163,11 @@ def train(model, *, epochs=5, callbacks) -> None:
 
 def main(args):
 	model = None
+	use_mfcc = False
 	if args.model == "model_1":
 		model = Model_1
 	if args.model == "model_mfcc":
+		use_mfcc = True
 		model = Model_mfcc
 
 	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
@@ -184,7 +187,8 @@ def main(args):
 		loss='sparse_categorical_crossentropy',
 		metrics=['accuracy']
 	)
-	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks)
+
+	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks, use_mfcc=use_mfcc)
 	# if args.save_model == True:
 	# 	trained_model.save_weights(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')

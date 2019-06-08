@@ -7,24 +7,35 @@ import numpy as np
 import argparse
 import librosa
 
+from models.model_1 import model as Model_1
 from models.model_mfcc import model as Model_mfcc
 import utils
 from config import Config
 
 def get_recording_files_paths(mode="training") -> List[List]:
 	# data_root = os.path.join(Config.RECORDING_PATH_ROOT, "\Park\Surdoiu_Tudor\Day_1")
-	data_root = "D:\\Storage\\EEGRecordings\\Part_one" + "\\Park\\Surdoiu_Tudor\\Day_1"
-	# data_root = "D:\\Storage\\EEGRecordings\\Part_two\\Session_2\\Park"
+	if mode == "training":
+		data_root = Config.RECORDING_PATH_ROOT + "\\train"
+	if mode == "testing":
+		data_root = Config.RECORDING_PATH_ROOT + "\\test"
+
 	data_root = pathlib.Path(data_root)
-	all_recordings_path = list(data_root.glob('*'))
+	classes_dir = list(data_root.glob('*'))
+	print(f"Number of classes directories: [{len(classes_dir)}]")
 
-	print(f"Scanned [{len(all_recordings_path)}] images")
+	all_file_paths = []
+	number_of_samples = 0
 
-	all_recordings_path = [str(path) for path in all_recordings_path]
-	return all_recordings_path
+	for class_dir in classes_dir:
+		recording_files = list(pathlib.Path(class_dir).glob('*'))
+		all_file_paths.append([str(path) for path in recording_files])
+		number_of_samples += len(recording_files)
+
+	print(f"Scanned [{number_of_samples}] images")
+	return all_file_paths
 
 
-def load_recording(path, use_mfcc=True):
+def load_recording(path, use_mfcc=False):
 	# fileContents = tf.io.read_file(path)
 	# splitedFileContents = tf.string_split([fileContents], os.linesep)
 	df = pd.read_csv(path, skiprows=[0], header=None, names=["COUNTER", "INTERPOLATED", "F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2", "P8", "T8", "F8", "AF4", "FC6", "F4", "RAW_CQ", "GYROX"]) # "GYROY", "MARKER", "MARKER_HARDWARE", "SYNC", "TIME_STAMP_s", "TIME_STAMP_ms", "CQ_AF3", "CQ_F7", "CQ_F3", "CQ_FC5", "CQ_T7", "CQ_P7", "CQ_O1", "CQ_O2", "CQ_P8", "CQ_T8", "CQ_FC6", "CQ_F4", "CQ_F8", "CQ_AF4", "CQ_CMS", "CQ_DRL"])
@@ -63,13 +74,14 @@ def compute_mfcc(recording):
 	# print(transformed_recording.shape)
 	return transformed_recording
 
-def create_testing_dataset():
+def create_testing_dataset(use_mfcc=True):
 	recordings = []
 	labels = []
 
-	for n, file_path in enumerate(get_recording_files_paths(mode="testing")):
-		recordings.append(load_recording(file_path))
-		labels.append(0)
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="training")):
+		for m, file_path in enumerate(class_file_list):
+			recordings.append(load_recording(file_path, use_mfcc))
+			labels.append(n)
 
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
 	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
@@ -78,9 +90,15 @@ def create_testing_dataset():
 	dataset = dataset.shuffle(len(recordings))
 	return dataset
 
+
 def main(args):
+	use_mfcc = False
 	model = None
+	
+	if args.model == "model_1":
+		model = Model_1
 	if args.model == "model_mfcc":
+		use_mfcc = True
 		model = Model_mfcc
 
 	model.compile(
@@ -92,7 +110,7 @@ def main(args):
 	latest = tf.train.latest_checkpoint("./checkpoints")
 	model.load_weights(latest)
 
-	dataset_test = create_testing_dataset()
+	dataset_test = create_testing_dataset(use_mfcc)
 	model.evaluate(dataset_test)
 
 if __name__ == "__main__":
