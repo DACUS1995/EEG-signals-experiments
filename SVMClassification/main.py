@@ -8,13 +8,15 @@ import argparse
 import pathlib
 
 from sklearn.svm import SVC, LinearSVC, NuSVC
-from sklearn.decomposition import PCA, FastICA
+from sklearn.decomposition import PCA, FastICA, TruncatedSVD
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 from sklearn.multiclass import OneVsOneClassifier
+from sklearn.model_selection import GridSearchCV
+from scipy.signal import convolve
 
 from config import Config
 import utils
@@ -87,9 +89,16 @@ def create_training_dataset(shuffle=True, use_mfcc=True):
 	labels = []
 	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
 
+	gabor_filters = [genGabor((40, 1), omega=i) for i in np.arange(0.1, 1, 0.3)]
+	print(f"Number of gabor filters used: [{len(gabor_filters)}]")
+
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
-			recordings.append(load_recording(file_path, use_mfcc))
+			recording = load_recording(file_path, use_mfcc)
+			res = np.empty((0), dtype=recording.dtype)
+			for gabor in gabor_filters:
+				res = np.append(res, convolve(recording, gabor, mode="valid"))
+			recordings.append(res)
 			labels.append(n)
 
 	return (recordings, labels)
@@ -99,15 +108,21 @@ def create_testing_dataset(use_mfcc=True):
 	recordings = []
 	labels = []
 
+	gabor_filters = [genGabor((40, 1), omega=i) for i in np.arange(0.1, 1, 0.3)]
+
 	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
 		for m, file_path in enumerate(class_file_list):
-			recordings.append(load_recording(file_path, use_mfcc))
+			recording = load_recording(file_path, use_mfcc)
+			res = np.empty((0), dtype=recording.dtype)
+			for gabor in gabor_filters:
+				res = np.append(res, convolve(recording, gabor, mode="valid"))
+			recordings.append(res)
 			labels.append(n)
 
 	return (recordings, labels)
 
 
-def genGabor(sz, omega=0.2, theta=0, func=np.cos, K=np.pi):
+def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
 	radius = (int(sz[0]/2.0), int(sz[1]/2.0))
 	[x, y] = np.meshgrid(range(-radius[0], radius[0]+1), range(-radius[1], radius[1]+1))
 
@@ -122,8 +137,18 @@ def genGabor(sz, omega=0.2, theta=0, func=np.cos, K=np.pi):
 
 
 def evaluatePipeline(pipeline, pipelineName, x_train, y_train, x_test, y_test):
-	pipeline.fit(x_train, y_train)
-	result = pipeline.predict(x_test)
+
+	param_grid = {
+		'tsvd__n_components': [50, 100, 200, 300],
+	}
+
+	search = GridSearchCV(pipeline, param_grid, iid=False, cv=5)
+
+	search.fit(x_train, y_train)
+	print("Best parameter (CV score=%0.3f):" % search.best_score_)
+	print(search.best_params_)
+
+	result = search.predict(x_test)
 
 	print(result)
 
@@ -138,7 +163,8 @@ def evaluatePipeline(pipeline, pipelineName, x_train, y_train, x_test, y_test):
 
 def create_classification_pipeline(classifier):
 	return Pipeline([
-		# ("FastICA", FastICA(n_components=500)),
+		("tsvd", TruncatedSVD()),
+		# ("pca", PCA()),
 		("Classifier", OneVsOneClassifier(classifier))
 	])
 
@@ -146,9 +172,9 @@ def create_classification_pipeline(classifier):
 def main(args):
 	use_mfcc = False
 
-	gabor = genGabor((200, 1))
-	utils.plot_single_signal(gabor)
-	raise Exception("Here")
+	# gabor = genGabor((50, 1))
+	# utils.plot_single_signal(gabor)
+	# raise Exception("Here")
 
 	x_train, y_train = create_training_dataset(use_mfcc=use_mfcc)
 	x_test, y_test = create_testing_dataset(use_mfcc)
