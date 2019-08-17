@@ -8,6 +8,7 @@ import argparse
 import datetime
 import librosa
 import matplotlib.pyplot as plt
+from scipy.signal import convolve
 
 from config import Config
 from models.model_1 import model as Model_1
@@ -87,9 +88,19 @@ def load_recording(path, use_mfcc=False):
 	if use_mfcc:
 		recording = compute_mfcc(recording)
 
-	return recording
-	# print(splitedFileContents)
-	# return preprocess_file(splitedFileContents)
+	recording = np.transpose(recording)
+
+	gabor_filters = [genGabor((40, 1), omega=i) for i in np.arange(0.1, 1, 0.2)]
+	# res = np.empty((0), dtype=recording.dtype)
+	res = []
+
+	for gabor in gabor_filters:
+		for line in range(recording.shape[0]):
+			res.append(convolve(recording[line], gabor, mode="same"))
+
+	res = np.array(res)
+	return np.transpose(res)
+
 
 def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	recordings = []
@@ -99,6 +110,7 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
 			recordings.append(load_recording(file_path, use_mfcc))
+			# print(load_recording(file_path, use_mfcc).shape)
 			labels.append(n)
 
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -110,7 +122,7 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	# 	print(tf.math.reduce_min(recording, axis=0))
 	# 	print(recording)
 
-	#  !! Remeber to shuffle berfore using batch !!
+	#  !! Remember to shuffle berfore using batch !!
 	if shuffle == True:
 		dataset = dataset.shuffle(len(recordings))
 
@@ -133,6 +145,20 @@ def create_testing_dataset(use_mfcc=True):
 	dataset = dataset.batch(1)
 	dataset = dataset.shuffle(len(recordings))
 	return dataset
+
+
+def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
+	radius = (int(sz[0]/2.0), int(sz[1]/2.0))
+	[x, y] = np.meshgrid(range(-radius[0], radius[0]+1), range(-radius[1], radius[1]+1))
+
+	x1 = x * np.cos(theta) + y * np.sin(theta)
+	y1 = -x * np.sin(theta) + y * np.cos(theta)
+    
+	gauss = omega**2 / (4*np.pi * K**2) * np.exp(- omega**2 / (8*K**2) * ( 4 * x1**2 + y1**2))
+	sinusoid = func(omega * x1) * np.exp(K**2 / 2)
+	gabor = gauss * sinusoid
+	gabor = np.array(gabor)
+	return gabor.flatten()
 
 
 def train(model, *, epochs=5, callbacks, use_mfcc) -> None:

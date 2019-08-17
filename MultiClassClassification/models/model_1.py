@@ -25,14 +25,15 @@ class Model(tf.keras.Model):
 		self.norm5 = tf.keras.layers.BatchNormalization()
 
 		self.flatten = tf.keras.layers.Flatten()
-		self.d1 = tf.keras.layers.Dense(512, activation='relu')
+		self.d1 = tf.keras.layers.Dense(256, activation='relu')
 		self.dropout = tf.keras.layers.Dropout(0.2)
 		self.d2 = tf.keras.layers.Dense(2, activation='softmax')
 
 	def call(self, x, training=False):
 		# out = self.reshape(x)
 		# out = tf.expand_dims(x, 2)
-		out = tf.reshape(x, [-1, Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS), 1])
+		out = tf.reshape(x, [-1, Config.RECORDING_NUM_SAMPLES, 70, 1])
+
 		out = self.conv1(out)
 		out = self.pool(out)
 		if training:
@@ -41,11 +42,11 @@ class Model(tf.keras.Model):
 		out = self.conv2(out)
 		out = self.norm2(out)
 
-		out = self.conv3(out)
-		out = self.norm3(out)
+		# out = self.conv3(out)
+		# out = self.norm3(out)
 
-		out = self.conv4(out)
-		out = self.norm4(out)
+		# out = self.conv4(out)
+		# out = self.norm4(out)
 
 		out = self.flatten(out)
 		out = self.d1(out)

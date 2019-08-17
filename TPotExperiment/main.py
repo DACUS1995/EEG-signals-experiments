@@ -17,6 +17,7 @@ from sklearn.metrics import f1_score
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.model_selection import GridSearchCV
 from scipy.signal import convolve
+from tpot import TPOTClassifier
 
 from config import Config
 import utils
@@ -136,55 +137,27 @@ def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
 	return gabor.flatten()
 
 
-def evaluatePipeline(pipeline, pipelineName, x_train, y_train, x_test, y_test):
-
-	param_grid = {
-		'tsvd__n_components': [50, 100, 200, 300],
-	}
-
-	search = GridSearchCV(pipeline, param_grid, iid=False, cv=5)
-
-	search.fit(x_train, y_train)
-	print("Best parameter (CV score=%0.3f):" % search.best_score_)
-	print(search.best_params_)
-
-	result = search.predict(x_test)
-
-	print(result)
-
-	print(pipelineName)
-	print("Accuracy:    ", accuracy_score(y_test, result))
-	print("Precission:  ", precision_score(y_test, result, average="binary"))
-	print("Recall:  ", recall_score(y_test, result, average="binary"))
-	print("F1:  ", f1_score(y_test, result, average="binary"))
-	print("")
-
-
-
-def create_classification_pipeline(classifier):
-	return Pipeline([
-		("tsvd", TruncatedSVD()),
-		# ("pca", PCA()),
-		("Classifier", OneVsOneClassifier(classifier))
-	])
-
-
-def main(args):
-	use_mfcc = False
-
-	gabor_filters = [utils.plot_single_signal(genGabor((40, 1), omega=i)) for i in np.arange(0.4, 2, 0.3)]
+def train(use_mfcc = False):
+	# gabor_filters = [utils.plot_single_signal(genGabor((40, 1), omega=i)) for i in np.arange(0.4, 2, 0.3)]
 	# gabor = genGabor((50, 1))
 	# utils.plot_single_signal(gabor)
-	raise Exception("Here")
 
 	x_train, y_train = create_training_dataset(use_mfcc=use_mfcc)
 	x_test, y_test = create_testing_dataset(use_mfcc)
 
-	pipeline = create_classification_pipeline(SVC(kernel="poly"))
-	evaluatePipeline(pipeline, "LinearSVC poly kernel", x_train, y_train, x_test, y_test)
+	x_train = np.asarray(x_train)
+	y_train = np.asarray(y_train)
+	x_test = np.asarray(x_test)
+	y_test = np.asarray(y_test)
+	
+	tpot = TPOTClassifier(generations=5, population_size=20, verbosity=2)
+	tpot.fit(x_train, y_train)
+	print(tpot.score(x_test, y_test))
+	tpot.export('tpot_mnist_pipeline.py')
 
-	pipeline = create_classification_pipeline(SVC(kernel="rbf"))
-	evaluatePipeline(pipeline, "LinearSVC rbf kernel", x_train, y_train, x_test, y_test)
+def main(args):
+	use_mfcc = False
+	train(use_mfcc)
 
 
 if __name__ == "__main__":
