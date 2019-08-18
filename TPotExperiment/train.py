@@ -85,7 +85,7 @@ def load_recording(path, use_mfcc=False):
 	# return preprocess_file(splitedFileContents)
 
 
-def create_training_dataset(shuffle=True, use_mfcc=True):
+def create_training_dataset(shuffle=True, use_mfcc=False, use_gabor=False):
 	recordings = []
 	labels = []
 	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
@@ -96,16 +96,19 @@ def create_training_dataset(shuffle=True, use_mfcc=True):
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
 			recording = load_recording(file_path, use_mfcc)
-			res = np.empty((0), dtype=recording.dtype)
-			for gabor in gabor_filters:
-				res = np.append(res, convolve(recording, gabor, mode="valid"))
-			recordings.append(res)
+
+			if use_gabor == True:
+				recording = np.empty((0), dtype=recording.dtype)
+				for gabor in gabor_filters:
+					recording = np.append(recording, convolve(recording, gabor, mode="valid"))
+			
+			recordings.append(recording)
 			labels.append(n)
 
 	return (recordings, labels)
 
 
-def create_testing_dataset(use_mfcc=True):
+def create_testing_dataset(use_mfcc=False, use_gabor=False):
 	recordings = []
 	labels = []
 
@@ -114,10 +117,13 @@ def create_testing_dataset(use_mfcc=True):
 	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
 		for m, file_path in enumerate(class_file_list):
 			recording = load_recording(file_path, use_mfcc)
-			res = np.empty((0), dtype=recording.dtype)
-			for gabor in gabor_filters:
-				res = np.append(res, convolve(recording, gabor, mode="valid"))
-			recordings.append(res)
+
+			if use_gabor == True:
+				recording = np.empty((0), dtype=recording.dtype)
+				for gabor in gabor_filters:
+					recording = np.append(recording, convolve(recording, gabor, mode="valid"))
+			
+			recordings.append(recording)
 			labels.append(n)
 
 	return (recordings, labels)
@@ -137,13 +143,13 @@ def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
 	return gabor.flatten()
 
 
-def train(use_mfcc = False):
+def train(use_mfcc = False, use_gabor = False):
 	# gabor_filters = [utils.plot_single_signal(genGabor((40, 1), omega=i)) for i in np.arange(0.4, 2, 0.3)]
 	# gabor = genGabor((50, 1))
 	# utils.plot_single_signal(gabor)
 
-	x_train, y_train = create_training_dataset(use_mfcc=use_mfcc)
-	x_test, y_test = create_testing_dataset(use_mfcc)
+	x_train, y_train = create_training_dataset(use_mfcc=use_mfcc, use_gabor=False)
+	x_test, y_test = create_testing_dataset(use_mfcc=use_mfcc, use_gabor=False)
 
 	x_train = np.asarray(x_train)
 	y_train = np.asarray(y_train)
@@ -157,7 +163,8 @@ def train(use_mfcc = False):
 
 def main(args):
 	use_mfcc = False
-	train(use_mfcc)
+	use_gabor = False
+	train(use_mfcc=use_mfcc, use_gabor=use_gabor)
 
 
 if __name__ == "__main__":
