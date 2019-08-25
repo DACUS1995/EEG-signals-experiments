@@ -68,7 +68,7 @@ def compute_mfcc(recording):
 	# print(transformed_recording.shape)
 	return transformed_recording
 
-def load_recording(path, use_mfcc=False):
+def load_recording(path, use_mfcc=False, use_gabor=False):
 	# fileContents = tf.io.read_file(path)
 	# splitedFileContents = tf.string_split([fileContents], os.linesep)
 	df = pd.read_csv(path, skiprows=[0], header=None, names=["COUNTER", "INTERPOLATED", "F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2", "P8", "T8", "F8", "AF4", "FC6", "F4", "RAW_CQ", "GYROX"]) # "GYROY", "MARKER", "MARKER_HARDWARE", "SYNC", "TIME_STAMP_s", "TIME_STAMP_ms", "CQ_AF3", "CQ_F7", "CQ_F3", "CQ_FC5", "CQ_T7", "CQ_P7", "CQ_O1", "CQ_O2", "CQ_P8", "CQ_T8", "CQ_FC6", "CQ_F4", "CQ_F8", "CQ_AF4", "CQ_CMS", "CQ_DRL"])
@@ -88,28 +88,32 @@ def load_recording(path, use_mfcc=False):
 	if use_mfcc:
 		recording = compute_mfcc(recording)
 
-	recording = np.transpose(recording)
+	res = recording
 
-	gabor_filters = [genGabor((40, 1), omega=i) for i in np.arange(0.1, 1, 0.2)]
-	# res = np.empty((0), dtype=recording.dtype)
-	res = []
+	if(use_gabor):
+		recording = np.transpose(recording)
+		gabor_filters = [genGabor((40, 1), omega=i) for i in np.arange(0.1, 1, 0.2)]
+		# res = np.empty((0), dtype=recording.dtype)
+		res = []
 
-	for gabor in gabor_filters:
-		for line in range(recording.shape[0]):
-			res.append(convolve(recording[line], gabor, mode="same"))
+		for gabor in gabor_filters:
+			for line in range(recording.shape[0]):
+				res.append(convolve(recording[line], gabor, mode="same"))
 
-	res = np.array(res)
-	return np.transpose(res)
+		res = np.transpose(np.array(res))
+
+	print(res.shape)
+	return res
 
 
-def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
+def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True, use_gabor=False):
 	recordings = []
 	labels = []
 	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
 
 	for n, class_file_list in enumerate(get_recording_files_paths()):
 		for m, file_path in enumerate(class_file_list):
-			recordings.append(load_recording(file_path, use_mfcc))
+			recordings.append(load_recording(file_path, use_mfcc, use_gabor))
 			# print(load_recording(file_path, use_mfcc).shape)
 			labels.append(n)
 
@@ -130,13 +134,13 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
 	return dataset, len(recordings)
 
-def create_testing_dataset(use_mfcc=True):
+def create_testing_dataset(use_mfcc=True, use_gabor=False):
 	recordings = []
 	labels = []
 
 	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
 		for m, file_path in enumerate(class_file_list):
-			recordings.append(load_recording(file_path, use_mfcc))
+			recordings.append(load_recording(file_path, use_mfcc, use_gabor))
 			labels.append(n)
 
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -161,18 +165,18 @@ def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
 	return gabor.flatten()
 
 
-def train(model, *, epochs=5, callbacks, use_mfcc) -> None:
-	dataset, length = create_training_dataset(batch_size=5, use_mfcc=use_mfcc)
-	dataset_test = create_testing_dataset(use_mfcc)
+def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
+	dataset, length = create_training_dataset(batch_size=5, use_mfcc=use_mfcc, use_gabor=use_gabor)
+	dataset_test = create_testing_dataset(use_mfcc=use_mfcc, use_gabor=use_gabor)
 
 	# Use samples from the same session for validation
-	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	# Use samples from different session for validation
-	# validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	# dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
-	# train_dataset = dataset
+	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	train_dataset = dataset
 
 	model.fit(
 		train_dataset, 
@@ -190,6 +194,8 @@ def train(model, *, epochs=5, callbacks, use_mfcc) -> None:
 def main(args):
 	model = None
 	use_mfcc = False
+	use_gabor = True
+
 	if args.model == "model_1":
 		model = Model_1
 	if args.model == "model_mfcc":
@@ -214,7 +220,13 @@ def main(args):
 		metrics=['accuracy']
 	)
 
-	trained_model = train(model=model, epochs=args.epochs, callbacks=callbacks, use_mfcc=use_mfcc)
+	trained_model = train(
+		model=model, 
+		epochs=args.epochs, 
+		callbacks=callbacks,
+		use_mfcc=use_mfcc,
+		use_gabor=use_gabor
+	)
 	# if args.save_model == True:
 	# 	trained_model.save_weights(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')
@@ -222,7 +234,7 @@ def main(args):
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
-	parser.add_argument("-m", "--model", type=str, default="model_mfcc", help="What model to use.")
+	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
 	# parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save model.")
 	args = parser.parse_args()
 	main(args)
