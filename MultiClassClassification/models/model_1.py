@@ -41,17 +41,19 @@ class Model(tf.keras.Model):
 	def call(self, x, training=False):
 		# out = self.reshape(x)
 		# out = tf.expand_dims(x, 2)
-		out = tf.reshape(x, [-1, Config.RECORDING_NUM_SAMPLES, 70, 1])
+		out = tf.reshape(x, [-1, Config.RECORDING_NUM_SAMPLES, 14, 1])
 
 		out = self.conv1(out)
 		out = self.pool(out)
-		out = self.drop1(out)
 		if training:
+			out = self.drop1(out)
 			out = self.norm1(out)
 
 		out = self.conv4(out)
-		out = self.norm4(out)
-		out = self.drop4(out)
+
+		if training:
+			out = self.drop4(out)
+			out = self.norm4(out)
 
 		# out = self.conv3(out)
 		# out = self.norm3(out)

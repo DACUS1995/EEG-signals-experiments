@@ -13,6 +13,7 @@ from scipy.signal import convolve
 from config import Config
 from models.model_1 import model as Model_1
 from models.model_mfcc import model as Model_mfcc
+from models.model_RNN import model as Model_lstm
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -102,7 +103,6 @@ def load_recording(path, use_mfcc=False, use_gabor=False):
 
 		res = np.transpose(np.array(res))
 
-	print(res.shape)
 	return res
 
 
@@ -148,7 +148,7 @@ def create_testing_dataset(use_mfcc=True, use_gabor=False):
 	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
 	dataset = dataset.batch(1)
 	dataset = dataset.shuffle(len(recordings))
-	return dataset
+	return dataset, len(recordings)
 
 
 def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
@@ -167,15 +167,15 @@ def genGabor(sz, omega=0.5, theta=0, func=np.cos, K=np.pi):
 
 def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 	dataset, length = create_training_dataset(batch_size=5, use_mfcc=use_mfcc, use_gabor=use_gabor)
-	dataset_test = create_testing_dataset(use_mfcc=use_mfcc, use_gabor=use_gabor)
+	dataset_test, length_test = create_testing_dataset(use_mfcc=use_mfcc, use_gabor=use_gabor)
 
 	# Use samples from the same session for validation
 	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
 	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	# Use samples from different session for validation
-	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test)) 
+	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test))
 	train_dataset = dataset
 
 	model.fit(
@@ -194,13 +194,15 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 def main(args):
 	model = None
 	use_mfcc = False
-	use_gabor = True
+	use_gabor = False
 
 	if args.model == "model_1":
 		model = Model_1
 	if args.model == "model_mfcc":
 		use_mfcc = True
 		model = Model_mfcc
+	if args.model == "model_lstm":
+		model = Model_lstm
 
 	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
 	log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
