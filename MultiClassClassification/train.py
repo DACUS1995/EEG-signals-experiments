@@ -233,10 +233,15 @@ def main(args):
 	# 	trained_model.save_weights(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
+	if args.print_summary == True:
+		model.summary()
+		utils.plot_model(model)
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
 	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
+	parser.add_argument("-p", "--print_summary", type=bool, default=False, help="Print summary and plot model")
 	# parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save model.")
 	args = parser.parse_args()
 	main(args)
