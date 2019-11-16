@@ -166,7 +166,7 @@ def create_image_encoder(output_layer_name="block5_conv4", embedding_size=512):
 	return model
 
 
-def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extractor):
+def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extractor, optimizer):
 	loss = 0
 	img_tensor = tf.squeeze(img_tensor)
 	
@@ -192,36 +192,39 @@ def train(model, *, epochs=5) -> None:
 	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
 	optimizer = tf.keras.optimizers.Adam()
 
-	# Checkpoint setup
-	checkpoint_path = "./checkpoints/train"
-	ckpt = tf.train.Checkpoint(encoder=image_feature_extractor, decoder=eeg_feature_extractor, optimizer=optimizer)
-	ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
+	# Checkpoint setup
+	# checkpoint_path = "./checkpoints/train"
+	# ckpt = tf.train.Checkpoint(encoder=image_feature_extractor, decoder=eeg_feature_extractor, optimizer=optimizer)
+	# ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+
+	
 	start_epoch = 0
-	if ckpt_manager.latest_checkpoint:
-		start_epoch = int(ckpt_manager.latest_checkpoint.split('-')[-1])
+	# if ckpt_manager.latest_checkpoint:
+	# 	start_epoch = int(ckpt_manager.latest_checkpoint.split('-')[-1])
 
 	loss_plot = []
 
+	
 	for epoch in range(start_epoch, epochs):
 		start = time.time()
 		total_loss = 0
 
 		for (batch, (img_tensor, record_sample)) in enumerate(dataset):
-			batch_loss, t_loss = train_step(img_tensor, record_sample, image_feature_extractor, eeg_feature_extractor)
+			batch_loss, t_loss = train_step(img_tensor, record_sample, image_feature_extractor, eeg_feature_extractor, optimizer)
 			total_loss += t_loss
 
 			if batch % 100 == 0:
 				print ('Epoch {} Batch {} Loss {:.4f}'.format(epoch + 1, batch, batch_loss.numpy()))
 
 		# storing the epoch end loss value to plot later
-		loss_plot.append(total_loss / num_steps)
+		# loss_plot.append(total_loss / num_steps)
 
-		if epoch % 5 == 0:
-			ckpt_manager.save()
+		# if epoch % 5 == 0:
+		# 	ckpt_manager.save()
 
-		print ('Epoch {} Loss {:.6f}'.format(epoch + 1, total_loss/num_steps))
-		print ('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+		# print ('Epoch {} Loss {:.6f}'.format(epoch + 1, total_loss/num_steps))
+		# print ('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
 
 	# model.fit(
 	# 	train_dataset, 
@@ -248,12 +251,12 @@ def main(args):
 		metrics=['accuracy']
 	)
 
-	latest = tf.train.latest_checkpoint("./models/checkpoints_mfcc")
-	model.load_weights(latest)
-	model.trainable  = False
+	# latest = tf.train.latest_checkpoint("./models/checkpoints_mfcc")
+	# model.load_weights(latest)
+	# model.trainable  = False
 
-	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
-	log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+	# checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
+	# log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
 	# callbacks = [
@@ -265,6 +268,7 @@ def main(args):
 	# ]
 
 	trained_model = train(model=model, epochs=args.epochs)
+
 	if args.save_model == True:
 		trained_model.save(f'{args.model}.h5')
 		# new_model = keras.models.load_model('my_model.h5')

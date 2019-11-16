@@ -126,3 +126,4 @@ dmypy.json
 
 logs
 checkpoints
+*.h5

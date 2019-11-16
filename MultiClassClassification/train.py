@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 from scipy.signal import convolve
 
 from config import Config
-from models.model_1 import model as Model_1
-from models.model_mfcc import model as Model_mfcc
-from models.model_RNN import model as Model_lstm
+from models.model_1 import Model as Model_1
+from models.model_mfcc import Model as Model_mfcc
+from models.model_RNN import Model as Model_lstm
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -170,25 +170,64 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 	dataset_test, length_test = create_testing_dataset(use_mfcc=use_mfcc, use_gabor=use_gabor)
 
 	# Use samples from the same session for validation
-	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	# Use samples from different session for validation
-	validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test)) 
-	dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test))
-	train_dataset = dataset
+	# validation_dataset = dataset_test.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test)) 
+	# dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test))
+	# train_dataset = dataset
 
-	model.fit(
-		train_dataset, 
-		epochs=epochs, 
-		validation_data=validation_dataset,
-		callbacks=callbacks
-	)
+	# model.fit(
+	# 	train_dataset, 
+	# 	epochs=epochs, 
+	# 	validation_data=validation_dataset,
+	# 	callbacks=callbacks
+	# )
+
+	train_loss_results = []
+	train_accuracy_results = []
+
+	num_epochs = 201
+
+	for epoch in range(num_epochs):
+		epoch_loss_avg = tf.keras.metrics.Mean()
+		epoch_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+
+		# Training loop - using batches of 32
+		for x, y in train_dataset:
+			# Optimize the model
+			loss_value, grads = grad(model, x, y)
+			optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+			# Track progress
+			epoch_loss_avg(loss_value)  # Add current batch loss
+			# Compare predicted label to actual label
+			epoch_accuracy(y, model(x))
+
+		# End epoch
+		train_loss_results.append(epoch_loss_avg.result())
+		train_accuracy_results.append(epoch_accuracy.result())
+
+		if epoch % 50 == 0:
+			print("Epoch {:03d}: Loss: {:.3f}, Accuracy: {:.3%}".format(epoch, epoch_loss_avg.result(), epoch_accuracy.result()))
 
 	model.evaluate(dataset_test)
 	return model
 	# for n, (recording, label) in enumerate(dataset):
 	# 	print(recording[0, 0])
+
+
+def init_model(model, dataset):
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
+
+	dataset = dataset.take(1)
+	model.fit(dataset)
+	return model
 
 
 def main(args):
@@ -197,12 +236,15 @@ def main(args):
 	use_gabor = False
 
 	if args.model == "model_1":
-		model = Model_1
+		model_class = Model_1
+		model = model_class()
 	if args.model == "model_mfcc":
 		use_mfcc = True
-		model = Model_mfcc
+		model_class = Model_mfcc
+		model = model_class()
 	if args.model == "model_lstm":
-		model = Model_lstm
+		model_class = Model_lstm
+		model = model_class()
 
 	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
 	log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -211,7 +253,7 @@ def main(args):
 	callbacks = [
 		# Interrupt training if `val_loss` stops improving for over 2 epochs
 		# tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss'),
-		tf.keras.callbacks.ModelCheckpoint(checkpoint_prefix, save_best_only=True, period=2),
+		# tf.keras.callbacks.ModelCheckpoint(checkpoint_prefix, save_best_only=True, period=2),
 		# Write TensorBoard logs to `./logs` directory
 		tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 	]
@@ -229,9 +271,16 @@ def main(args):
 		use_mfcc=use_mfcc,
 		use_gabor=use_gabor
 	)
-	# if args.save_model == True:
-	# 	trained_model.save_weights(f'{args.model}.h5')
-		# new_model = keras.models.load_model('my_model.h5')
+
+	if args.save_model == True:
+		# The model description can also be saved as a JSON
+		model.save_weights(f"{args.model}.h5", overwrite=False, save_format="HDF5")
+		new_model = model_class()
+
+		dataset, _ = create_training_dataset(batch_size=5, use_mfcc=use_mfcc, use_gabor=use_gabor)
+		new_model = init_model(new_model, dataset)
+		new_model.load_weights(f"{args.model}.h5")
+
 
 	if args.print_summary == True:
 		model.summary()
@@ -242,6 +291,6 @@ if __name__ == "__main__":
 	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
 	parser.add_argument("-m", "--model", type=str, default="model_1", help="What model to use.")
 	parser.add_argument("-p", "--print_summary", type=bool, default=False, help="Print summary and plot model")
-	# parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save model.")
+	parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save model.")
 	args = parser.parse_args()
 	main(args)
