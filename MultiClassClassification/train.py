@@ -185,16 +185,15 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 	# 	callbacks=callbacks
 	# )
 
+	optimizer = tf.keras.optimizers.Adam()
+
 	train_loss_results = []
 	train_accuracy_results = []
 
-	num_epochs = 201
-
-	for epoch in range(num_epochs):
+	for epoch in range(epochs):
 		epoch_loss_avg = tf.keras.metrics.Mean()
 		epoch_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
-		# Training loop - using batches of 32
 		for x, y in train_dataset:
 			# Optimize the model
 			loss_value, grads = grad(model, x, y)
@@ -209,13 +208,39 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 		train_loss_results.append(epoch_loss_avg.result())
 		train_accuracy_results.append(epoch_accuracy.result())
 
-		if epoch % 50 == 0:
+		if epoch % 1 == 0:
 			print("Epoch {:03d}: Loss: {:.3f}, Accuracy: {:.3%}".format(epoch, epoch_loss_avg.result(), epoch_accuracy.result()))
+		
+		if epoch % 5 == 0:
+			evaluate_model(model, validation_dataset)
 
-	model.evaluate(dataset_test)
 	return model
 	# for n, (recording, label) in enumerate(dataset):
 	# 	print(recording[0, 0])
+
+
+def evaluate_model(model, test_dataset):
+	test_accuracy = tf.keras.metrics.Accuracy()
+
+	for (x, y) in test_dataset:
+		pred = model(x)
+		prediction = tf.argmax(pred, axis=1, output_type=tf.int32)
+		test_accuracy(prediction, y)
+
+	print("Test set accuracy: {:.3%}".format(test_accuracy.result()))
+
+def grad(model, inputs, targets):
+	with tf.GradientTape() as tape:
+		loss_value = loss(model, inputs, targets)
+
+	return loss_value, tape.gradient(loss_value, model.trainable_variables)
+
+
+def loss(model, x, y):
+	loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)
+	y_ = model(x)
+
+	return loss_object(y_true=y, y_pred=y_)
 
 
 def init_model(model, dataset):
@@ -258,11 +283,11 @@ def main(args):
 		tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 	]
 
-	model.compile(
-		optimizer='adam',
-		loss='sparse_categorical_crossentropy',
-		metrics=['accuracy']
-	)
+	# model.compile(
+	# 	optimizer='adam',
+	# 	loss='sparse_categorical_crossentropy',
+	# 	metrics=['accuracy']
+	# )
 
 	trained_model = train(
 		model=model, 
