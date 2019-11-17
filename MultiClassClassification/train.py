@@ -213,6 +213,9 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 		
 		if epoch % 5 == 0:
 			evaluate_model(model, validation_dataset)
+		
+		epoch_loss_avg.reset_states()
+		epoch_accuracy.reset_states()
 
 	return model
 	# for n, (recording, label) in enumerate(dataset):

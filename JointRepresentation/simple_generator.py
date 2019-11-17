@@ -51,19 +51,6 @@ def preprocess_file(file):
 	csv_file = tf.io.decode_csv(file, ["a"])
 	return csv_file
 
-def compute_mfcc(recording):
-	transformed_recording = None
-
-	for i in range(recording.shape[1]):
-		current_channel = librosa.feature.mfcc(recording[:, i], sr=40, n_mfcc=10, hop_length=10, n_fft=40)
-		if transformed_recording is None:
-			transformed_recording = current_channel
-		else:
-			transformed_recording = np.append(transformed_recording, current_channel, axis=0)
-
-	assert transformed_recording is not None
-	# print(transformed_recording.shape)
-	return transformed_recording
 
 def load_recording(path, use_mfcc=False):
 	# fileContents = tf.io.read_file(path)
@@ -82,9 +69,6 @@ def load_recording(path, use_mfcc=False):
 	if recording.shape[0] != Config.RECORDING_NUM_SAMPLES:
 		raise Exception(f"Session number of samples is super not OK: [{recording.shape[0]}]")
 
-	if use_mfcc:
-		recording = compute_mfcc(recording)
-
 	return recording
 	# print(splitedFileContents)
 	# return preprocess_file(splitedFileContents)
@@ -95,21 +79,18 @@ def load_img(path_to_img):
 	img = tf.io.read_file(path_to_img)
 	img = tf.image.decode_image(img, channels=3)
 	img = tf.image.convert_image_dtype(img, tf.float32)
+	img = tf.image.rgb_to_grayscale(img)
 
-	shape = tf.cast(tf.shape(img)[:-1], tf.float32)
-	long_dim = max(shape)
-	scale = max_dim / long_dim
-
-	new_shape = tf.cast(shape * scale, tf.int32)
+	new_shape = (28, 28)
 
 	img = tf.image.resize(img, new_shape)
-	img = img[tf.newaxis, :]
+	# img = img[tf.newaxis, :]
 	return img
 
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	img = tf.keras.applications.vgg19.preprocess_input(img)
+	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
 
@@ -127,7 +108,7 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 
 	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
-	dataset = tf.data.Dataset.zip((dataset_img, dataset_recordings))
+	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_img))
 
 	#  !! Remeber to shuffle berfore using batch !!
 	if shuffle == True:
@@ -153,79 +134,54 @@ def create_testing_dataset(use_mfcc=True):
 	dataset = dataset.shuffle(len(recordings))
 	return dataset
 
+#TODO implement
+def create_model():
+	model = Model_lstm()
 
-def create_image_encoder(output_layer_name="block5_conv4", embedding_size=512):
-	image_model = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
-	image_model.trainable = False # !Maybe fine tune this!
-	
-	image_model_output = image_model.layers[-1].output
-	output = tf.squeeze(image_model_output, axis=[1, 2])
-	output = tf.keras.layers.Flatten()(output)
-	output = tf.keras.layers.Dense(embedding_size, activation='softmax')(output)
-
-	model = tf.keras.Model(inputs=image_model.input, outputs=output)
-	return model
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
+	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
 
 
-def train_step(img_tensor, eeg_signal, image_feature_extractor, eeg_feature_extractor, optimizer):
-	loss = 0
-	img_tensor = tf.squeeze(img_tensor)
-	
-	with tf.GradientTape() as tape:
-		features_image = image_feature_extractor(img_tensor)
-		features_eeg = eeg_feature_extractor(eeg_signal)
-		loss = tf.losses.cosine_distance(features_image, features_eeg)
+def grad(model, record_sample, img_tensor):
+	pass
 
-	total_loss = loss
-	trainable_variables = image_feature_extractor.trainable_variables
-	gradients = tape.gradient(loss, trainable_variables)
-	optimizer.apply_gradients(zip(gradients, trainable_variables))
-
-	return loss, total_loss
-
+def loss(model, record_sample, img_tensor):
+	pass
 
 def train(model, *, epochs=5) -> None:
 	dataset, length = create_training_dataset(batch_size=5)
 	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
 	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
-	image_feature_extractor = create_image_encoder()
-	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
 	optimizer = tf.keras.optimizers.Adam()
 
-
-	# Checkpoint setup
-	# checkpoint_path = "./checkpoints/train"
-	# ckpt = tf.train.Checkpoint(encoder=image_feature_extractor, decoder=eeg_feature_extractor, optimizer=optimizer)
-	# ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-
-	
 	start_epoch = 0
-	# if ckpt_manager.latest_checkpoint:
-	# 	start_epoch = int(ckpt_manager.latest_checkpoint.split('-')[-1])
+	train_loss_results = []
 
-	loss_plot = []
-
-	
 	for epoch in range(start_epoch, epochs):
-		start = time.time()
-		total_loss = 0
+		epoch_loss_avg = tf.keras.metrics.Mean()
 
-		for (batch, (img_tensor, record_sample)) in enumerate(dataset):
-			batch_loss, t_loss = train_step(img_tensor, record_sample, image_feature_extractor, eeg_feature_extractor, optimizer)
-			total_loss += t_loss
+		for (batch, (record_sample, img_tensor)) in enumerate(dataset):
+			# Optimize the model
+			loss_value, grads = grad(model, record_sample, img_tensor)
+			optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-			if batch % 100 == 0:
-				print ('Epoch {} Batch {} Loss {:.4f}'.format(epoch + 1, batch, batch_loss.numpy()))
+			# Track progress
+			epoch_loss_avg(loss_value)  # Add current batch loss
+			# Compare predicted label to actual label
+			epoch_accuracy(y, model(x))
 
-		# storing the epoch end loss value to plot later
-		# loss_plot.append(total_loss / num_steps)
+		# End epoch
+		train_loss_results.append(epoch_loss_avg.result())
+		.append(epoch_accuracy.result())
 
-		# if epoch % 5 == 0:
-		# 	ckpt_manager.save()
-
-		# print ('Epoch {} Loss {:.6f}'.format(epoch + 1, total_loss/num_steps))
-		# print ('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+		if epoch % 1 == 0:
+			print("Epoch {:03d}: Loss: {:.3f}".format(epoch, epoch_loss_avg.result()))
+		
 
 	dataset_test = create_testing_dataset()
 	model.evaluate(dataset_test)
@@ -233,30 +189,7 @@ def train(model, *, epochs=5) -> None:
 
 
 def main(args):
-	model = Model_lstm()
-
-
-	model.compile(
-		optimizer='adam',
-		loss='sparse_categorical_crossentropy',
-		metrics=['accuracy']
-	)
-
-	# latest = tf.train.latest_checkpoint("./models/checkpoints_mfcc")
-	# model.load_weights(latest)
-	# model.trainable  = False
-
-	# checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
-	# log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-
-
-	# callbacks = [
-	# 	# Interrupt training if `val_loss` stops improving for over 2 epochs
-	# 	tf.keras.callbacks.EarlyStopping(patience=5, monitor='val_loss'),
-	# 	tf.keras.callbacks.ModelCheckpoint(checkpoint_prefix, save_best_only=True, period=2),
-	# 	# Write TensorBoard logs to `./logs` directory
-	# 	tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-	# ]
+	model = create_model()
 
 	trained_model = train(model=model, epochs=args.epochs)
 
