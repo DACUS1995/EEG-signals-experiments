@@ -8,10 +8,12 @@ import argparse
 import datetime
 import librosa
 import time
+import matplotlib.pyploy as plt
 
 from config import Config
 from models.model_mfcc import Model as Model_mfcc
-from models.model_RNN import Model as Model_lstm
+from models.model_lstm import Model as Model_lstm
+from models.generator import define_generator
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -134,21 +136,36 @@ def create_testing_dataset(use_mfcc=True):
 	dataset = dataset.shuffle(len(recordings))
 	return dataset
 
-#TODO implement
+
+def plot_training_metrics(train_loss_results):
+	fig, axes = plt.subplots(2, sharex=True, figsize=(12, 8))
+	fig.suptitle('Training Metrics')
+
+	axes[0].set_ylabel("Loss", fontsize=14)
+	axes[0].set_xlabel("Epoch", fontsize=14)
+	axes[0].plot(train_loss_results)
+	plt.show()
+
+
 def create_model():
 	model = Model_lstm()
 
-	model.compile(
-		optimizer='adam',
-		loss='sparse_categorical_crossentropy',
-		metrics=['accuracy']
-	)
+	model.load_weights("model_lstm.h5")
+
+	model.summary()
+
 	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
+	eeg_feature_extractor.trainable = False
+	return eeg_feature_extractor
 
 
 def grad(model, record_sample, img_tensor):
-	pass
+	with tf.GradientTape() as tape:
+		loss_value = loss(model, inputs, targets)
 
+	return loss_value, tape.gradient(loss_value, model.trainable_variables)
+
+#TODO implement
 def loss(model, record_sample, img_tensor):
 	pass
 
@@ -172,16 +189,14 @@ def train(model, *, epochs=5) -> None:
 
 			# Track progress
 			epoch_loss_avg(loss_value)  # Add current batch loss
-			# Compare predicted label to actual label
-			epoch_accuracy(y, model(x))
 
 		# End epoch
 		train_loss_results.append(epoch_loss_avg.result())
-		.append(epoch_accuracy.result())
 
 		if epoch % 1 == 0:
 			print("Epoch {:03d}: Loss: {:.3f}".format(epoch, epoch_loss_avg.result()))
 		
+	plot_training_metrics(train_loss_results)
 
 	dataset_test = create_testing_dataset()
 	model.evaluate(dataset_test)
