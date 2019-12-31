@@ -8,12 +8,12 @@ import argparse
 import datetime
 import librosa
 import time
-import matplotlib.pyploy as plt
+import matplotlib.pyplot as plt
 
 from config import Config
 from models.model_mfcc import Model as Model_mfcc
 from models.model_lstm import Model as Model_lstm
-from models.generator import define_generator
+from models.generator import Autoencoder
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -148,26 +148,23 @@ def plot_training_metrics(train_loss_results):
 
 
 def create_model():
-	model = Model_lstm()
+	final_model = Autoencoder(
+		intermediate_dim=512, 
+		original_dim=784
+	)
 
-	model.load_weights("model_lstm.h5")
-
-	model.summary()
-
-	eeg_feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
-	eeg_feature_extractor.trainable = False
-	return eeg_feature_extractor
+	return final_model
 
 
 def grad(model, record_sample, img_tensor):
 	with tf.GradientTape() as tape:
-		loss_value = loss(model, inputs, targets)
+		loss_value = loss(model, record_sample, img_tensor)
 
 	return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
-#TODO implement
 def loss(model, record_sample, img_tensor):
-	pass
+	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(model(record_sample), original)))
+	return reconstruction_error
 
 def train(model, *, epochs=5) -> None:
 	dataset, length = create_training_dataset(batch_size=5)
