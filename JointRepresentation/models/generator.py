@@ -22,10 +22,11 @@ class Decoder(tf.keras.layers.Layer):
 
 
 class Autoencoder(tf.keras.Model):
-	def __init__(self, intermediate_dim, original_dim):
+	def __init__(self, intermediate_dim, original_dim, dataset):
 		super(Autoencoder, self).__init__()
 
 		model = Model_lstm()
+		init_model(model, dataset)
 		model.load_weights("models/model_lstm.h5")
 
 		self.encoder = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
@@ -88,4 +89,16 @@ def define_generator_old(latent_dim):
 	out_layer = Conv2D(1, (7,7), activation='tanh', padding='same')(gen)
 	# define model
 	model = Model([in_lat, in_label], out_layer)
+	return model
+
+
+def init_model(model, dataset):
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
+
+	sample = dataset.take(1)
+	model(sample)
 	return model

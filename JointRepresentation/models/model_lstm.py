@@ -53,4 +53,6 @@ class Model(tf.keras.Model):
 		out = self.d2(out)
 		return out
 
+		
+
 model = Model()

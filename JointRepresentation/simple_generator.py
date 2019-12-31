@@ -147,10 +147,11 @@ def plot_training_metrics(train_loss_results):
 	plt.show()
 
 
-def create_model():
+def create_model(dataset):
 	final_model = Autoencoder(
 		intermediate_dim=512, 
-		original_dim=784
+		original_dim=784,
+		dataset=dataset
 	)
 
 	return final_model
@@ -166,11 +167,7 @@ def loss(model, record_sample, img_tensor):
 	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(model(record_sample), original)))
 	return reconstruction_error
 
-def train(model, *, epochs=5) -> None:
-	dataset, length = create_training_dataset(batch_size=5)
-	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
-
+def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	optimizer = tf.keras.optimizers.Adam()
 
 	start_epoch = 0
@@ -201,9 +198,18 @@ def train(model, *, epochs=5) -> None:
 
 
 def main(args):
-	model = create_model()
+	dataset, length = create_training_dataset(batch_size=5)
+	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
-	trained_model = train(model=model, epochs=args.epochs)
+	model = create_model(dataset)
+
+	trained_model = train(
+		model=model,
+		epochs=args.epochs,
+		validation_dataset=validation_dataset,
+		train_dataset=train_dataset
+	)
 
 	if args.save_model == True:
 		trained_model.save(f'{args.model}.h5')
