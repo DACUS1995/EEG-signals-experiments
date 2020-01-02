@@ -41,7 +41,7 @@ class Model(tf.keras.Model):
 			out = self.drop2(out)
 			out = self.norm2(out)
 
-		out = tf.reshape(out, [-1, 95, 32 * 7])
+		out = tf.reshape(out, [-1, 100, 32 * 7])
 		out = tf.cast(out, dtype=tf.float32)
 		out = self.lstm1(out)
 		out = self.lstm2(out)

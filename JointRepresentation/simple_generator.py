@@ -212,7 +212,7 @@ def main(args):
 	)
 
 	if args.save_model == True:
-		trained_model.save(f'{args.model}.h5')
+		trained_model.save('generator.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":

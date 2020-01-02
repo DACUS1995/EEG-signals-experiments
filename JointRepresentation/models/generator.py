@@ -28,8 +28,10 @@ class Autoencoder(tf.keras.Model):
 		model = Model_lstm()
 		init_model(model, dataset)
 		model.load_weights("models/model_lstm.h5")
+		model.summary()
+		# tf.keras.utils.plot_model(model, to_file='model.png')
 
-		self.encoder = tf.keras.Model(inputs=model.input, outputs=model.layers[10].output)
+		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[11].output)
 		self.encoder.trainable = False
 		self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
 
@@ -99,6 +101,9 @@ def init_model(model, dataset):
 		metrics=['accuracy']
 	)
 
-	sample = dataset.take(1)
-	model(sample)
+	sample_dataset = dataset.take(1)
+	# model.fit(sample_dataset)
+	for (batch, (record_sample, img_tensor)) in enumerate(sample_dataset):
+		model(record_sample)
+	
 	return model
