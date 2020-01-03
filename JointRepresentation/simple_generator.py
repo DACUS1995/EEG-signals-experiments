@@ -176,7 +176,7 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	for epoch in range(start_epoch, epochs):
 		epoch_loss_avg = tf.keras.metrics.Mean()
 
-		for (batch, (record_sample, img_tensor)) in enumerate(dataset):
+		for (batch, (record_sample, img_tensor)) in enumerate(train_dataset):
 			# Optimize the model
 			loss_value, grads = grad(model, record_sample, img_tensor)
 			optimizer.apply_gradients(zip(grads, model.trainable_variables))
@@ -192,8 +192,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 		
 	plot_training_metrics(train_loss_results)
 
-	dataset_test = create_testing_dataset()
-	model.evaluate(dataset_test)
+	# dataset_test = create_testing_dataset()
+	# model.evaluate(dataset_test)
 	return model
 
 

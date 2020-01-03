@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from models.model_lstm import Model as Model_lstm
+from config import Config
 
 
 class Decoder(tf.keras.layers.Layer):
@@ -25,13 +26,13 @@ class Autoencoder(tf.keras.Model):
 	def __init__(self, intermediate_dim, original_dim, dataset):
 		super(Autoencoder, self).__init__()
 
-		model = Model_lstm()
-		init_model(model, dataset)
-		model.load_weights("models/model_lstm.h5")
+		# model = Model_lstm()
+		# init_model(model, dataset)
+		model = tf.keras.models.load_model("models/latest.h5")
 		model.summary()
 		# tf.keras.utils.plot_model(model, to_file='model.png')
 
-		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[11].output)
+		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[12].output)
 		self.encoder.trainable = False
 		self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
 

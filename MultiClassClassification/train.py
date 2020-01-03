@@ -14,6 +14,7 @@ from config import Config
 from models.model_1 import Model as Model_1
 from models.model_mfcc import Model as Model_mfcc
 from models.model_RNN import Model as Model_lstm
+from models.model_RNN import create_model
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -178,12 +179,14 @@ def train(model, *, epochs=5, callbacks, use_mfcc, use_gabor) -> None:
 	# dataset_test = dataset_test.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length_test))
 	# train_dataset = dataset
 
-	# model.fit(
-	# 	train_dataset, 
-	# 	epochs=epochs, 
-	# 	validation_data=validation_dataset,
-	# 	callbacks=callbacks
-	# )
+	model.fit(
+		train_dataset, 
+		epochs=epochs, 
+		validation_data=validation_dataset,
+		callbacks=callbacks
+	)
+
+	return model
 
 	optimizer = tf.keras.optimizers.Adam()
 
@@ -272,7 +275,7 @@ def main(args):
 		model = model_class()
 	if args.model == "model_lstm":
 		model_class = Model_lstm
-		model = model_class()
+		model = create_model()
 
 	checkpoint_prefix = os.path.join(Config.CHECKPOINTS_DIR, "ckpt_{epoch}")
 	log_dir=Config.TENSORBOARD_LOGDIR + "\\fit\\" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -286,11 +289,11 @@ def main(args):
 		tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 	]
 
-	# model.compile(
-	# 	optimizer='adam',
-	# 	loss='sparse_categorical_crossentropy',
-	# 	metrics=['accuracy']
-	# )
+	model.compile(
+		optimizer='adam',
+		loss='sparse_categorical_crossentropy',
+		metrics=['accuracy']
+	)
 
 	trained_model = train(
 		model=model, 
@@ -302,17 +305,18 @@ def main(args):
 
 	if args.save_model == True:
 		# The model description can also be saved as a JSON
-		model.save_weights(f"{args.model}.h5", overwrite=False, save_format="HDF5")
-		new_model = model_class()
+		# model.save_weights(f"{args.model}.h5", overwrite=False, save_format="HDF5")
+		# new_model = model_class()
 
-		dataset, _ = create_training_dataset(batch_size=5, use_mfcc=use_mfcc, use_gabor=use_gabor)
-		new_model = init_model(new_model, dataset)
-		new_model.load_weights(f"{args.model}.h5")
-
+		# dataset, _ = create_training_dataset(batch_size=5, use_mfcc=use_mfcc, use_gabor=use_gabor)
+		# new_model = init_model(new_model, dataset)
+		# new_model.load_weights(f"{args.model}.h5")
+		trained_model.save("latest.h5", overwrite=False)
 
 	if args.print_summary == True:
-		model.summary()
-		utils.plot_model(model)
+		loaded_model = tf.keras.models.load_model("latest.h5")
+		loaded_model.summary()
+		utils.plot_model(loaded_model)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()

@@ -53,4 +53,31 @@ class Model(tf.keras.Model):
 		out = self.d2(out)
 		return out
 
+
+def create_model():
+	inputs = tf.keras.Input(shape=(Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS)))
+	out = tf.keras.layers.Reshape((Config.RECORDING_NUM_SAMPLES, len(Config.SENSORS_LABELS), 1))(inputs)
+	
+	out = tf.keras.layers.Conv2D(32, 3, activation='relu', padding="same")(out)
+	out = tf.keras.layers.MaxPool2D(pool_size=(2,2), padding="same")(out)
+	out = tf.keras.layers.Dropout(0.5)(out)
+	out = tf.keras.layers.BatchNormalization()(out)
+
+	out = tf.keras.layers.Conv2D(32, 3, activation='relu', padding="same")(out)
+	out = tf.keras.layers.Dropout(0.5)(out)
+	out = tf.keras.layers.BatchNormalization()(out)
+	
+	out = tf.keras.layers.Reshape((95, 32 * 7))(out)
+	out = tf.keras.layers.LSTM(126, return_sequences = True)(out) #return_sequences = True for stacking
+	out = tf.keras.layers.LSTM(126)(out)
+
+	out = tf.keras.layers.Flatten()(out)
+	out = tf.keras.layers.Dense(512, activation='relu')(out)
+	out = tf.keras.layers.Dropout(0.2)(out)
+	out = tf.keras.layers.Dense(2, activation='softmax')(out)
+
+	autoencoder = tf.keras.Model(inputs, out, name='autoencoder')
+	autoencoder.summary()
+	return autoencoder
+
 model = Model()
