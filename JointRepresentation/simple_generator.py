@@ -92,6 +92,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
+	img = tf.reshape(img, (28 * 28,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -164,7 +165,15 @@ def grad(model, record_sample, img_tensor):
 	return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 def loss(model, record_sample, img_tensor):
-	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(model(record_sample), original)))
+	# print(record_sample.dtype)
+	# print(record_sample.shape)
+	# print(img_tensor.dtype)
+	# print(img_tensor.shape)
+
+	img_tensor = tf.cast(img_tensor, tf.float32)
+	record_sample = tf.cast(record_sample, tf.float32)
+
+	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(model(record_sample), img_tensor)))
 	return reconstruction_error
 
 def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
@@ -211,8 +220,23 @@ def main(args):
 		train_dataset=train_dataset
 	)
 
+	for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset.take(1)):
+		record_sample = tf.cast(record_sample, tf.float32)
+
+		reconstructed = tf.reshape(trained_model(record_sample), (-1, 28, 28))
+		original = tf.reshape(img_tensor, (-1, 28, 28))
+
+		reconstructed = reconstructed.numpy()
+		original = original.numpy()
+
+		plt.imshow(np.squeeze(reconstructed[0]))
+		plt.show()
+		plt.imshow(np.squeeze(original[0]))
+		plt.show()
+
+
 	if args.save_model == True:
-		trained_model.save('generator.h5')
+		trained_model.save_weights('./generator.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":
