@@ -34,34 +34,34 @@ class Autoencoder(tf.keras.Model):
 
 		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[12].output)
 		self.encoder.trainable = False
-		self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
+		# self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
+		self.decoder = define_generator(intermediate_dim, original_dim)
 
 	def call(self, input_features):
 		code = self.encoder(input_features)
 		reconstructed = self.decoder(code)
 		return reconstructed
 
-def define_generator(latent_dim=512):
-	# linear multiplication
-	n_nodes = 7 * 7
+def define_generator(latent_dim, original_dim):
 	# image generator input
-	in_lat = Input(shape=(latent_dim,))
+	in_lat = tf.keras.Input(shape=(,latent_dim))
 	# foundation for 7x7 image
 	n_nodes = 128 * 7 * 7
-	gen = Dense(n_nodes)(in_lat)
-	gen = LeakyReLU(alpha=0.2)(gen)
-	gen = Reshape((7, 7, 128))(gen)
-	merge = gen
+	gen = tf.keras.layers.Dense(n_nodes, activation="relu")(in_lat)
+	gen = tf.keras.layers.Reshape((7, 7, 128))(gen)
+
 	# upsample to 14x14
-	gen = Conv2DTranspose(128, (4,4), strides=(2,2), padding='same')(merge)
-	gen = LeakyReLU(alpha=0.2)(gen)
+	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
 	# upsample to 28x28
-	gen = Conv2DTranspose(128, (4,4), strides=(2,2), padding='same')(gen)
-	gen = LeakyReLU(alpha=0.2)(gen)
+	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
+	# upsample to 56x56
+	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
+
 	# output
-	out_layer = Conv2D(1, (7,7), activation='tanh', padding='same')(gen)
+	out_layer = tf.keras.layers.Conv2D(1, (7,7), activation='tanh', padding='same')(gen)
+	# out_layer = Dense(original_dim)(gen)
 	# define model
-	model = Model([in_lat, in_label], out_layer)
+	model = tf.keras.Model(inputs=in_lat, outputs=out_layer)
 	return model
 
 
@@ -86,7 +86,7 @@ def define_generator_old(latent_dim):
 	gen = Conv2DTranspose(128, (4,4), strides=(2,2), padding='same')(merge)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# upsample to 28x28
-	gen = Conv2DTranspose(128, (4,4), strides=(2,2), padding='same')(gen)
+	gen = Conv2DTranspose(1, (4,4), strides=(2,2), padding='same')(gen)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# output
 	out_layer = Conv2D(1, (7,7), activation='tanh', padding='same')(gen)

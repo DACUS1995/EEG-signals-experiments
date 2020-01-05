@@ -83,7 +83,7 @@ def load_img(path_to_img):
 	img = tf.image.convert_image_dtype(img, tf.float32)
 	img = tf.image.rgb_to_grayscale(img)
 
-	new_shape = (28, 28)
+	new_shape = (56, 56)
 
 	img = tf.image.resize(img, new_shape)
 	# img = img[tf.newaxis, :]
@@ -92,7 +92,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	img = tf.reshape(img, (28 * 28,))
+	img = tf.reshape(img, (56 * 56,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -121,21 +121,26 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
 	return dataset, len(recordings)
 
-def create_testing_dataset(use_mfcc=True):
+def create_testing_dataset(batch_size=5, use_mfcc=True):
 	recordings = []
-	labels = []
+	images = []
 
-	for n, class_file_list in enumerate(get_recording_files_paths()):
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
 		for m, file_path in enumerate(class_file_list):
 			recordings.append(load_recording(file_path, use_mfcc))
-			labels.append(n)
+			path_components = file_path.split("\\")
+			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
+			images.append(load_and_process_img(path_to_img))
 
+	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
-	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
-	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_labels))
-	dataset = dataset.batch(1)
+	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_img))
+
 	dataset = dataset.shuffle(len(recordings))
-	return dataset
+
+	dataset = dataset.batch(batch_size)
+	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
+	return dataset, len(recordings)
 
 
 def plot_training_metrics(train_loss_results):
@@ -151,7 +156,7 @@ def plot_training_metrics(train_loss_results):
 def create_model(dataset):
 	final_model = Autoencoder(
 		intermediate_dim=512, 
-		original_dim=784,
+		original_dim=3136,
 		dataset=dataset
 	)
 
@@ -182,27 +187,41 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	start_epoch = 0
 	train_loss_results = []
 
-	for epoch in range(start_epoch, epochs):
-		epoch_loss_avg = tf.keras.metrics.Mean()
+	log_dir = "logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+	writer = tf.summary.create_file_writer(log_dir)
+	
+	with writer.as_default():
+		with tf.summary.record_if(True):
+			for epoch in range(start_epoch, epochs):
+				epoch_loss_avg = tf.keras.metrics.Mean()
 
-		for (batch, (record_sample, img_tensor)) in enumerate(train_dataset):
-			# Optimize the model
-			loss_value, grads = grad(model, record_sample, img_tensor)
-			optimizer.apply_gradients(zip(grads, model.trainable_variables))
+				for (batch, (record_sample, img_tensor)) in enumerate(train_dataset):
+					# Optimize the model
+					loss_value, grads = grad(model, record_sample, img_tensor)
+					optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-			# Track progress
-			epoch_loss_avg(loss_value)  # Add current batch loss
+					# Track progress
+					epoch_loss_avg(loss_value)  # Add current batch loss
 
-		# End epoch
-		train_loss_results.append(epoch_loss_avg.result())
+				# End epoch
+				train_loss_results.append(epoch_loss_avg.result())
 
-		if epoch % 1 == 0:
-			print("Epoch {:03d}: Loss: {:.3f}".format(epoch, epoch_loss_avg.result()))
+				if epoch % 1 == 0:
+					print("Epoch {:03d}: Loss: {:.3f}".format(epoch, epoch_loss_avg.result()))
+
+				tf.summary.scalar('loss', loss_value, step=epoch)
+
+				if epoch % 5 == 0:
+					record_sample = tf.cast(record_sample, tf.float32)
+					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
+					original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+
+					tf.summary.image('original', original, max_outputs=100, step=epoch)
+					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
+			
 		
 	plot_training_metrics(train_loss_results)
 
-	# dataset_test = create_testing_dataset()
-	# model.evaluate(dataset_test)
 	return model
 
 
@@ -220,19 +239,43 @@ def main(args):
 		train_dataset=train_dataset
 	)
 
-	for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset.take(1)):
+	dataset_test, length = create_testing_dataset()
+
+	plt.figure(figsize=(5, 4))
+	for (batch, (record_sample, img_tensor)) in enumerate(dataset_test.take(5)):
 		record_sample = tf.cast(record_sample, tf.float32)
 
-		reconstructed = tf.reshape(trained_model(record_sample), (-1, 28, 28))
-		original = tf.reshape(img_tensor, (-1, 28, 28))
+		reconstructed = tf.reshape(trained_model(record_sample), (-1, 56, 56))
+		original = tf.reshape(img_tensor, (-1, 56, 56))
 
 		reconstructed = reconstructed.numpy()
 		original = original.numpy()
 
-		plt.imshow(np.squeeze(reconstructed[0]))
-		plt.show()
-		plt.imshow(np.squeeze(original[0]))
-		plt.show()
+
+	for index in range(5):
+		# display original
+		ax = plt.subplot(2, 5, index + 1)
+		test_image = original[index]
+		plt.imshow(test_image)
+		plt.gray()
+		ax.get_xaxis().set_visible(False)
+		ax.get_yaxis().set_visible(False)
+	
+		# display reconstruction
+		ax = plt.subplot(2, 5, index + 1 + 5)
+		created_image = reconstructed[index]
+		plt.imshow(created_image)
+		plt.gray()
+		ax.get_xaxis().set_visible(False)
+		ax.get_yaxis().set_visible(False)
+	
+	plt.show()
+
+
+		# plt.imshow(np.squeeze(reconstructed[0]), cmap='gray')
+		# plt.show()
+		# plt.imshow(np.squeeze(original[0]), cmap='gray')
+		# plt.show()
 
 
 	if args.save_model == True:
