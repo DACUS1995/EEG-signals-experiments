@@ -178,7 +178,10 @@ def loss(model, record_sample, img_tensor):
 	img_tensor = tf.cast(img_tensor, tf.float32)
 	record_sample = tf.cast(record_sample, tf.float32)
 
-	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(model(record_sample), img_tensor)))
+	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
+	original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+
+	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(reconstructed, original)))
 	return reconstruction_error
 
 def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
@@ -252,24 +255,24 @@ def main(args):
 		original = original.numpy()
 
 
-	for index in range(5):
-		# display original
-		ax = plt.subplot(2, 5, index + 1)
-		test_image = original[index]
-		plt.imshow(test_image)
-		plt.gray()
-		ax.get_xaxis().set_visible(False)
-		ax.get_yaxis().set_visible(False)
-	
-		# display reconstruction
-		ax = plt.subplot(2, 5, index + 1 + 5)
-		created_image = reconstructed[index]
-		plt.imshow(created_image)
-		plt.gray()
-		ax.get_xaxis().set_visible(False)
-		ax.get_yaxis().set_visible(False)
-	
-	plt.show()
+		for index in range(5):
+			# display original
+			ax = plt.subplot(2, 5, index + 1)
+			test_image = original[index]
+			plt.imshow(test_image)
+			plt.gray()
+			ax.get_xaxis().set_visible(False)
+			ax.get_yaxis().set_visible(False)
+		
+			# display reconstruction
+			ax = plt.subplot(2, 5, index + 1 + 5)
+			created_image = reconstructed[index]
+			plt.imshow(created_image)
+			plt.gray()
+			ax.get_xaxis().set_visible(False)
+			ax.get_yaxis().set_visible(False)
+		
+		plt.show()
 
 
 		# plt.imshow(np.squeeze(reconstructed[0]), cmap='gray')
