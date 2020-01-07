@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from config import Config
 from models.model_mfcc import Model as Model_mfcc
 from models.model_lstm import Model as Model_lstm
-from models.autoencoder import Autoencoder
+from models.variational_autoencoder import Autoencoder
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -163,6 +163,14 @@ def create_model(dataset):
 	return final_model
 
 
+def log_normal_pdf(sample, mean, logvar, raxis=1):
+	log2pi = tf.math.log(2. * np.pi)
+	return tf.reduce_sum(
+		-.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
+		axis=raxis
+	)
+
+
 def grad(model, record_sample, img_tensor):
 	with tf.GradientTape() as tape:
 		loss_value = loss(model, record_sample, img_tensor)
@@ -170,19 +178,18 @@ def grad(model, record_sample, img_tensor):
 	return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 def loss(model, record_sample, img_tensor):
-	# print(record_sample.dtype)
-	# print(record_sample.shape)
-	# print(img_tensor.dtype)
-	# print(img_tensor.shape)
-
-	img_tensor = tf.cast(img_tensor, tf.float32)
+	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 56, 56, 1))
 	record_sample = tf.cast(record_sample, tf.float32)
 
-	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
-	original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+	mean, logvar = model.encode(record_sample)
+	z = model.reparameterize(mean, logvar)
+	x_logit = model.decode(z)
 
-	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(reconstructed, original)))
-	return reconstruction_error
+	cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=img_tensor)
+	logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+	logpz = log_normal_pdf(z, 0., 0.)
+	logqz_x = log_normal_pdf(z, mean, logvar)
+	return -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
 def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	optimizer = tf.keras.optimizers.Adam()
@@ -192,6 +199,10 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 
 	log_dir = "logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 	writer = tf.summary.create_file_writer(log_dir)
+
+	random_vector_for_generation = tf.random.normal(
+		shape=[5, 512]
+	)
 	
 	with writer.as_default():
 		with tf.summary.record_if(True):
@@ -215,8 +226,7 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 				tf.summary.scalar('loss', loss_value, step=epoch)
 
 				if epoch % 5 == 0:
-					record_sample = tf.cast(record_sample, tf.float32)
-					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
+					reconstructed = tf.reshape(model.sample(random_vector_for_generation), (-1, 56, 56, 1))
 					original = tf.reshape(img_tensor, (-1, 56, 56, 1))
 
 					tf.summary.image('original', original, max_outputs=100, step=epoch)
@@ -242,37 +252,13 @@ def main(args):
 		train_dataset=train_dataset
 	)
 
-	dataset_test, length = create_testing_dataset()
+	random_vector_for_generation = tf.random.normal(
+		shape=[1, 512]
+	)
 
-	plt.figure(figsize=(5, 4))
-	for (batch, (record_sample, img_tensor)) in enumerate(dataset_test.take(5)):
-		record_sample = tf.cast(record_sample, tf.float32)
-
-		reconstructed = tf.reshape(trained_model(record_sample), (-1, 56, 56))
-		original = tf.reshape(img_tensor, (-1, 56, 56))
-
-		reconstructed = reconstructed.numpy()
-		original = original.numpy()
-
-
-		for index in range(5):
-			# display original
-			ax = plt.subplot(2, 5, index + 1)
-			test_image = original[index]
-			plt.imshow(test_image)
-			plt.gray()
-			ax.get_xaxis().set_visible(False)
-			ax.get_yaxis().set_visible(False)
-		
-			# display reconstruction
-			ax = plt.subplot(2, 5, index + 1 + 5)
-			created_image = reconstructed[index]
-			plt.imshow(created_image)
-			plt.gray()
-			ax.get_xaxis().set_visible(False)
-			ax.get_yaxis().set_visible(False)
-		
-		plt.show()
+	reconstructed = tf.reshape(model.sample(random_vector_for_generation), (-1, 56, 56, 1)).numpy()
+	plt.imshow(reconstructed)
+	plt.show()
 
 
 		# plt.imshow(np.squeeze(reconstructed[0]), cmap='gray')
