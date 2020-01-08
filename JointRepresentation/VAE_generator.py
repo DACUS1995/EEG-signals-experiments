@@ -81,7 +81,7 @@ def load_img(path_to_img):
 	img = tf.io.read_file(path_to_img)
 	img = tf.image.decode_image(img, channels=3)
 	img = tf.image.convert_image_dtype(img, tf.float32)
-	img = tf.image.rgb_to_grayscale(img)
+	# img = tf.image.rgb_to_grayscale(img)
 
 	new_shape = (56, 56)
 
@@ -92,7 +92,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	img = tf.reshape(img, (56 * 56,))
+	# img = tf.reshape(img, (56 * 56,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -156,7 +156,7 @@ def plot_training_metrics(train_loss_results):
 def create_model(dataset):
 	final_model = Autoencoder(
 		intermediate_dim=512, 
-		original_dim=3136,
+		original_dim=9408,
 		dataset=dataset
 	)
 
@@ -178,7 +178,7 @@ def grad(model, record_sample, img_tensor):
 	return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 def loss(model, record_sample, img_tensor):
-	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 56, 56, 1))
+	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 56, 56, 3))
 	record_sample = tf.cast(record_sample, tf.float32)
 
 	mean, logvar = model.encode(record_sample)
@@ -197,7 +197,7 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	start_epoch = 0
 	train_loss_results = []
 
-	log_dir = "logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+	log_dir = "logs/" + datetime.datetime.now().strftime("vae-%Y%m%d-%H%M%S")
 	writer = tf.summary.create_file_writer(log_dir)
 
 	random_vector_for_generation = tf.random.normal(
@@ -226,8 +226,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 				tf.summary.scalar('loss', loss_value, step=epoch)
 
 				if epoch % 5 == 0:
-					reconstructed = tf.reshape(model.sample(random_vector_for_generation), (-1, 56, 56, 1))
-					original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+					reconstructed = tf.reshape(model.sample(random_vector_for_generation), (-1, 56, 56, 3))
+					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
 					tf.summary.image('original', original, max_outputs=100, step=epoch)
 					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
@@ -256,7 +256,7 @@ def main(args):
 		shape=[1, 512]
 	)
 
-	reconstructed = tf.reshape(model.sample(random_vector_for_generation), (-1, 56, 56, 1)).numpy()
+	reconstructed = tf.reshape(model.sample(random_vector_for_generation), (56, 56, 3)).numpy()
 	plt.imshow(reconstructed)
 	plt.show()
 
@@ -268,7 +268,7 @@ def main(args):
 
 
 	if args.save_model == True:
-		trained_model.save_weights('./generator.h5')
+		trained_model.save_weights('./vae_generator.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":

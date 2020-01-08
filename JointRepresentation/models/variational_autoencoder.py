@@ -29,22 +29,52 @@ class Autoencoder(tf.keras.Model):
 		# model = Model_lstm()
 		# init_model(model, dataset)
 		model = tf.keras.models.load_model("models/latest.h5")
-		model.summary()
+		
+		# model.summary()
 		# tf.keras.utils.plot_model(model, to_file='model.png')
 
-		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[12].output)
-		self.encoder.trainable = False
+		self.latent_encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[13].output)
+		self.latent_encoder.trainable = False
+
+		self.encoder = tf.keras.Sequential([
+			self.latent_encoder,
+			tf.keras.layers.Flatten(),
+			tf.keras.layers.Dense(intermediate_dim + intermediate_dim)
+		])
+
 		# self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
 		self.decoder = define_generator(intermediate_dim, original_dim)
 
-	def call(self, input_features):
-		code = self.encoder(input_features)
-		reconstructed = self.decoder(code)
-		return reconstructed
+	@tf.function
+	def sample(self, eps=None):
+		if eps is None:
+			eps = tf.random.normal(shape=(100, self.latent_dim))
+		return self.decode(eps, apply_sigmoid=True)
+
+	def encode(self, x):
+		mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
+		return mean, logvar
+
+	def reparameterize(self, mean, logvar):
+		eps = tf.random.normal(shape=mean.shape)
+		return eps * tf.exp(logvar * .5) + mean
+
+	def decode(self, z, apply_sigmoid=False):
+		logits = self.decoder(z)
+		if apply_sigmoid:
+			probs = tf.sigmoid(logits)
+			return probs
+
+		return logits
+
+	def call(self, x):
+		pass
+
+
 
 def define_generator(latent_dim, original_dim):
 	# image generator input
-	in_lat = tf.keras.Input(shape=(,latent_dim))
+	in_lat = tf.keras.Input(shape=(latent_dim,))
 	# foundation for 7x7 image
 	n_nodes = 128 * 7 * 7
 	gen = tf.keras.layers.Dense(n_nodes, activation="relu")(in_lat)
@@ -58,40 +88,10 @@ def define_generator(latent_dim, original_dim):
 	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
 
 	# output
-	out_layer = tf.keras.layers.Conv2D(1, (7,7), activation='tanh', padding='same')(gen)
+	out_layer = tf.keras.layers.Conv2D(3, (7,7), activation='tanh', padding='same')(gen)
 	# out_layer = Dense(original_dim)(gen)
 	# define model
 	model = tf.keras.Model(inputs=in_lat, outputs=out_layer)
-	return model
-
-
-def define_generator_old(latent_dim):
-	# label input
-	in_label = Input(shape=(512,))
-	# linear multiplication
-	n_nodes = 7 * 7
-	li = Dense(n_nodes)(in_label)
-	# reshape to additional channel
-	li = Reshape((7, 7, 1))(li)
-	# image generator input
-	in_lat = Input(shape=(latent_dim,))
-	# foundation for 7x7 image
-	n_nodes = 128 * 7 * 7
-	gen = Dense(n_nodes)(in_lat)
-	gen = LeakyReLU(alpha=0.2)(gen)
-	gen = Reshape((7, 7, 128))(gen)
-	# merge image gen and label input
-	merge = Concatenate()([gen, li])
-	# upsample to 14x14
-	gen = Conv2DTranspose(128, (4,4), strides=(2,2), padding='same')(merge)
-	gen = LeakyReLU(alpha=0.2)(gen)
-	# upsample to 28x28
-	gen = Conv2DTranspose(1, (4,4), strides=(2,2), padding='same')(gen)
-	gen = LeakyReLU(alpha=0.2)(gen)
-	# output
-	out_layer = Conv2D(1, (7,7), activation='tanh', padding='same')(gen)
-	# define model
-	model = Model([in_lat, in_label], out_layer)
 	return model
 
 

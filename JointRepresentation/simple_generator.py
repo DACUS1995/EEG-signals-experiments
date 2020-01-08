@@ -190,7 +190,7 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 	start_epoch = 0
 	train_loss_results = []
 
-	log_dir = "logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+	log_dir = "logs/" + datetime.datetime.now().strftime("simple-%Y%m%d-%H%M%S")
 	writer = tf.summary.create_file_writer(log_dir)
 	
 	with writer.as_default():
@@ -295,7 +295,7 @@ def main(args):
 
 
 	if args.save_model == True:
-		trained_model.save_weights('./generator.h5')
+		trained_model.save_weights('./simple_generator.h5')
 		# new_model = keras.models.load_model('my_model.h5')
 
 if __name__ == "__main__":
