@@ -81,7 +81,7 @@ def load_img(path_to_img):
 	img = tf.io.read_file(path_to_img)
 	img = tf.image.decode_image(img, channels=3)
 	img = tf.image.convert_image_dtype(img, tf.float32)
-	img = tf.image.rgb_to_grayscale(img)
+	# img = tf.image.rgb_to_grayscale(img)
 
 	new_shape = (56, 56)
 
@@ -92,7 +92,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	img = tf.reshape(img, (56 * 56,))
+	# img = tf.reshape(img, (56 * 56,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -156,7 +156,7 @@ def plot_training_metrics(train_loss_results):
 def create_model(dataset):
 	final_model = Autoencoder(
 		intermediate_dim=512, 
-		original_dim=3136,
+		original_dim=9408,
 		dataset=dataset
 	)
 
@@ -178,8 +178,8 @@ def loss(model, record_sample, img_tensor):
 	img_tensor = tf.cast(img_tensor, tf.float32)
 	record_sample = tf.cast(record_sample, tf.float32)
 
-	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
-	original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
+	original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
 	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(reconstructed, original)))
 	return reconstruction_error
@@ -215,23 +215,39 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 				tf.summary.scalar('loss', loss_value, step=epoch)
 
 				if epoch % 5 == 0:
+					# Show images from the training dataset
 					record_sample = tf.cast(record_sample, tf.float32)
-					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 1))
-					original = tf.reshape(img_tensor, (-1, 56, 56, 1))
+					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
+					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
-					tf.summary.image('original', original, max_outputs=100, step=epoch)
-					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
-			
-		
+					tf.summary.image('original_train', original, max_outputs=100, step=epoch)
+					tf.summary.image('reconstructed_train', reconstructed, max_outputs=100, step=epoch)
+
+					# # Show images from the training dataset
+					# for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset):
+					# 	record_sample = tf.cast(record_sample, tf.float32)
+					# 	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
+					# 	original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+
+					# 	tf.summary.image('original_validation', original, max_outputs=100, step=epoch)
+					# 	tf.summary.image('reconstructed_validation', reconstructed, max_outputs=100, step=epoch)
+
+
 	plot_training_metrics(train_loss_results)
 
 	return model
 
 
+
 def main(args):
 	dataset, length = create_training_dataset(batch_size=5)
-	validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
-	train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
+	train_dataset = dataset
+
+	testing_dataset, length = create_testing_dataset()
+	validation_dataset = testing_dataset.take(5)
+
+	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
+	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
 	model = create_model(dataset)
 
@@ -242,14 +258,13 @@ def main(args):
 		train_dataset=train_dataset
 	)
 
-	dataset_test, length = create_testing_dataset()
 
 	plt.figure(figsize=(5, 4))
-	for (batch, (record_sample, img_tensor)) in enumerate(dataset_test.take(5)):
+	for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset.take(5)):
 		record_sample = tf.cast(record_sample, tf.float32)
 
-		reconstructed = tf.reshape(trained_model(record_sample), (-1, 56, 56))
-		original = tf.reshape(img_tensor, (-1, 56, 56))
+		reconstructed = tf.reshape(trained_model(record_sample), (-1, 56, 56, 3))
+		original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
 		reconstructed = reconstructed.numpy()
 		original = original.numpy()
@@ -260,7 +275,6 @@ def main(args):
 			ax = plt.subplot(2, 5, index + 1)
 			test_image = original[index]
 			plt.imshow(test_image)
-			plt.gray()
 			ax.get_xaxis().set_visible(False)
 			ax.get_yaxis().set_visible(False)
 		
@@ -268,7 +282,6 @@ def main(args):
 			ax = plt.subplot(2, 5, index + 1 + 5)
 			created_image = reconstructed[index]
 			plt.imshow(created_image)
-			plt.gray()
 			ax.get_xaxis().set_visible(False)
 			ax.get_yaxis().set_visible(False)
 		
