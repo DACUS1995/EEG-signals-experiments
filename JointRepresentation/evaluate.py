@@ -27,6 +27,7 @@ print("Using eager execution: " + str(tf.executing_eagerly()))
 print("Using tensorflow version: " + str(tf.__version__) + "\n")
 
 
+
 def get_recording_files_paths(mode="training") -> List[List]:
 	# data_root = os.path.join(Config.RECORDING_PATH_ROOT, "\Park\Surdoiu_Tudor\Day_1")
 	if mode == "training":
@@ -103,33 +104,6 @@ def one_hot_encode(class_num):
 		return [0, 1]
 
 
-def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
-	recordings = []
-	images = []
-	labels = []
-	# dateset_file_paths = tf.data.Dataset.from_tensor_slices(get_recording_files_paths())
-
-	for n, class_file_list in enumerate(get_recording_files_paths()):
-		for m, file_path in enumerate(class_file_list):
-			recordings.append(load_recording(file_path, use_mfcc))
-			path_components = file_path.split("\\")
-			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
-			images.append(load_and_process_img(path_to_img))
-			labels.append(one_hot_encode(n))
-
-	dataset_img = tf.data.Dataset.from_tensor_slices(images)
-	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
-	dataset_labels = tf.data.Dataset.from_tensor_slices(labels)
-	dataset = tf.data.Dataset.zip((dataset_recordings, dataset_img, dataset_labels))
-
-	#  !! Remeber to shuffle berfore using batch !!
-	if shuffle == True:
-		dataset = dataset.shuffle(len(recordings))
-
-	dataset = dataset.batch(batch_size)
-	dataset = dataset.prefetch(buffer_size=AUTOTUNE)
-	return dataset, len(recordings)
-
 def create_testing_dataset(batch_size=5, use_mfcc=True):
 	recordings = []
 	images = []
@@ -155,15 +129,6 @@ def create_testing_dataset(batch_size=5, use_mfcc=True):
 	return dataset, len(recordings)
 
 
-def plot_training_metrics(train_loss_results):
-	fig, axes = plt.subplots(2, sharex=True, figsize=(12, 8))
-	fig.suptitle('Training Metrics')
-
-	axes[0].set_ylabel("Loss", fontsize=14)
-	axes[0].set_xlabel("Epoch", fontsize=14)
-	axes[0].plot(train_loss_results)
-	plt.show()
-
 
 def create_model(dataset):
 	final_model = Autoencoder(
@@ -174,104 +139,15 @@ def create_model(dataset):
 
 	return final_model
 
-
-def log_normal_pdf(sample, mean, logvar, raxis=1):
-	log2pi = tf.math.log(2. * np.pi)
-	return tf.reduce_sum(
-		-.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-		axis=raxis
-	)
-
-
-def grad(model, record_sample, img_tensor, label):
-	with tf.GradientTape() as tape:
-		loss_value = loss(model, record_sample, img_tensor, label)
-
-	return loss_value, tape.gradient(loss_value, model.trainable_variables)
-
-def loss(model, record_sample, img_tensor, label):
-	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 56, 56, 3))
-	record_sample = tf.cast(record_sample, tf.float32)
-	label = tf.cast(label, tf.float32)
-
-	mean, logvar = model.encode(record_sample, label)
-	z = model.reparameterize(mean, logvar)
-	z_cond = tf.concat([z, label], axis=1)
-	x_logit = model.decode(z_cond)
-
-	cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=img_tensor)
-	logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-	logpz = log_normal_pdf(z, 0., 0.)
-	logqz_x = log_normal_pdf(z, mean, logvar)
-	return -tf.reduce_mean(logpx_z + logpz - logqz_x)
-
-def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
-	optimizer = tf.keras.optimizers.Adam()
-
-	start_epoch = 0
-	train_loss_results = []
-
-	log_dir = "logs/" + datetime.datetime.now().strftime("vae-%Y%m%d-%H%M%S")
-	writer = tf.summary.create_file_writer(log_dir)
-
-	random_vector_for_generation = tf.random.normal(
-		shape=[5, 512]
-	)
-	
-	with writer.as_default():
-		with tf.summary.record_if(True):
-			for epoch in range(start_epoch, epochs):
-				epoch_loss_avg = tf.keras.metrics.Mean()
-
-				for (batch, (record_sample, img_tensor, label)) in enumerate(train_dataset):
-					# Optimize the model
-					loss_value, grads = grad(model, record_sample, img_tensor, label)
-					optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
-					# Track progress
-					epoch_loss_avg(loss_value)  # Add current batch loss
-
-				# End epoch
-				train_loss_results.append(epoch_loss_avg.result())
-
-				if epoch % 1 == 0:
-					print("Epoch {:03d}: Loss: {:.3f}".format(epoch, epoch_loss_avg.result()))
-
-				tf.summary.scalar('loss', epoch_loss_avg.result(), step=epoch)
-
-				if epoch % 5 == 0:
-					x_logit = model(record_sample, label)
-
-					reconstructed = tf.reshape(x_logit, (-1, 56, 56, 3))
-					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
-
-					tf.summary.image('original', original, max_outputs=100, step=epoch)
-					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
-			
-		
-	plot_training_metrics(train_loss_results)
-
-	return model
-
-
 def main(args):
-	dataset, length = create_training_dataset(batch_size=5)
-	train_dataset = dataset
-
 	testing_dataset, length = create_testing_dataset()
 	validation_dataset = testing_dataset.take(5)
 
 	# validation_dataset = dataset.take(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length)) 
 	# train_dataset = dataset.skip(int(Config.DATASET_TRAINING_VALIDATION_RATIO * length))
 
-	model = create_model(dataset)
-
-	trained_model = train(
-		model=model,
-		epochs=args.epochs,
-		validation_dataset=validation_dataset,
-		train_dataset=train_dataset
-	)
+	model = create_model(validation_dataset)
+	model.save_weights('./vae_generator.h5')
 
 	random_vector_for_generation = tf.random.normal(
 		shape=[1, 512]
@@ -286,22 +162,13 @@ def main(args):
 	plt.imshow(reconstructed)
 	plt.show()
 
-	vector_for_generation = tf.concat(
-		[random_vector_for_generation, tf.convert_to_tensor([[0,1]], dtype=tf.float32)], 
-		axis=1
-	)
-
-	reconstructed = tf.reshape(model.sample(vector_for_generation), (56, 56, 3)).numpy()
-	plt.imshow(reconstructed)
-	plt.show()
-
 
 	plt.figure(figsize=(5, 4))
 	for (batch, (record_sample, img_tensor, label)) in enumerate(validation_dataset.take(5)):
 		record_sample = tf.cast(record_sample, tf.float32)
 		label = tf.cast(label, tf.float32)
 
-		reconstructed = tf.reshape(trained_model(record_sample, label), (-1, 56, 56, 3))
+		reconstructed = tf.reshape(model(record_sample, label), (-1, 56, 56, 3))
 		original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
 		reconstructed = reconstructed.numpy()
@@ -331,13 +198,7 @@ def main(args):
 		# plt.show()
 
 
-	if args.save_model == True:
-		trained_model.save_weights('./vae_generator.h5')
-		# new_model = keras.models.load_model('my_model.h5')
-
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs for training.")
-	parser.add_argument("-s", "--save_model", type=bool, default=True, help="Save the model.")
 	args = parser.parse_args()
 	main(args)

@@ -1,3 +1,4 @@
 env
 checkpoints
 models/checkpoints_mfcc
+*.v2

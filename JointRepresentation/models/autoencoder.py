@@ -35,8 +35,8 @@ class Autoencoder(tf.keras.Model):
 
 		self.encoder = tf.keras.Model(inputs=model.layers[0].input, outputs=model.layers[13].output)
 		self.encoder.trainable = False
-		# self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
-		self.decoder = define_generator(intermediate_dim, original_dim)
+		self.decoder = Decoder(intermediate_dim=intermediate_dim, original_dim=original_dim)
+		# self.decoder = define_generator(intermediate_dim, original_dim)
 
 	def call(self, input_features):
 		code = self.encoder(input_features)
