@@ -84,7 +84,7 @@ def load_img(path_to_img):
 	img = tf.image.convert_image_dtype(img, tf.float32)
 	# img = tf.image.rgb_to_grayscale(img)
 
-	new_shape = (56, 56)
+	new_shape = (112, 112)
 
 	img = tf.image.resize(img, new_shape)
 	# img = img[tf.newaxis, :]
@@ -158,16 +158,16 @@ def create_testing_dataset(batch_size=5, use_mfcc=True):
 
 
 def discriminator_loss(real_output, fake_output):
-	cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-	real_loss = cross_entropy(tf.ones_like(real_output), real_output)
-	fake_loss = cross_entropy(tf.zeros_like(fake_output), fake_output)
+	cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+	real_loss = cross_entropy(tf.zeros_like(real_output), real_output)
+	fake_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
 	total_loss = real_loss + fake_loss
 	return total_loss
 
 # We want the target to be ones(descriminator believe the gen samples to be true)
 def generator_loss(fake_output):
-	cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-	return cross_entropy(tf.ones_like(fake_output), fake_output)
+	cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+	return cross_entropy(tf.zeros_like(fake_output), fake_output)
 
 
 def plot_training_metrics(train_gen_loss_results, train_disc_loss_results):
@@ -218,8 +218,8 @@ def train_step(
 
 
 def train(generator, discriminator, *, epochs=5, validation_dataset, train_dataset) -> None:
-	generator_optimizer = tf.keras.optimizers.Adam(1e-4)
-	discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+	generator_optimizer = tf.keras.optimizers.Adam(lr=0.0002, beta_1=0.5)
+	discriminator_optimizer = tf.keras.optimizers.Adam(lr=0.0002, beta_1=0.5)
 
 	eeg_encoder = define_eeg_encoder()
 
@@ -242,7 +242,7 @@ def train(generator, discriminator, *, epochs=5, validation_dataset, train_datas
 					gen_loss, disc_loss = train_step(
 						img_tensor,
 						record_sample,
-						batch_size = 5,
+						batch_size = record_sample.shape[0],
 						noise_dim = 100,
 						generator_optimizer = generator_optimizer,
 						discriminator_optimizer = discriminator_optimizer,
@@ -257,6 +257,14 @@ def train(generator, discriminator, *, epochs=5, validation_dataset, train_datas
 
 				tf.summary.scalar('loss gen', epoch_loss_gen_avg.result(), step=epoch)
 				tf.summary.scalar('loss disc', epoch_loss_disc_avg.result(), step=epoch)
+				
+				noise = tf.random.normal([record_sample.shape[0], 100])
+				reconstructed = generator([noise, record_sample])
+				original = tf.reshape(img_tensor, (-1, 112, 112, 3))
+
+				tf.summary.image('original', original, max_outputs=100, step=epoch)
+				tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
+
 
 				# Save the model every 15 epochs
 				if (epoch + 1) % 5 == 0:
@@ -264,7 +272,7 @@ def train(generator, discriminator, *, epochs=5, validation_dataset, train_datas
 
 				print("Epoch {:03d}: Loss generator: {:.3f}".format(epoch, epoch_loss_gen_avg.result()))
 				print("Epoch {:03d}: Loss discriminator: {:.3f}".format(epoch, epoch_loss_disc_avg.result()))
-				print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
+				print ('Time for epoch {} is {} sec \n'.format(epoch + 1, time.time()-start))
 
 	plot_training_metrics(train_gen_loss_results, train_disc_loss_results)
 
@@ -294,8 +302,8 @@ def main(args):
 		record_sample = tf.cast(record_sample, tf.float32)
 		eeg_encoder = define_eeg_encoder()
 
-		reconstructed = tf.reshape(generator([noise, eeg_encoder(record_sample)]), (-1, 56, 56, 3))
-		original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+		reconstructed = generator([noise, eeg_encoder(record_sample)])
+		original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 		reconstructed = reconstructed.numpy()
 		original = original.numpy()

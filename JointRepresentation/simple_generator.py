@@ -220,8 +220,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
 					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
 
-					tf.summary.image('original_train', original, max_outputs=100, step=epoch)
-					tf.summary.image('reconstructed_train', reconstructed, max_outputs=100, step=epoch)
+					tf.summary.image('original', original, max_outputs=100, step=epoch)
+					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
 
 					# # Show images from the training dataset
 					# for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset):
