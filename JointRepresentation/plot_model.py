@@ -1,5 +1,5 @@
 import tensorflow as tf
-from models.model_RNN import model as Model_lstm
+from models.model_lstm import Model as Model_lstm
 import utils
 
 import argparse
@@ -15,7 +15,7 @@ def main(args):
 		raise Exception("No valid model")
 
 	model.summary()
-	utils.plot_model(model)
+	utils.plot_model(model, args.file)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import librosa.display as display
+import tensorflow as tf
 
 def normalization(data):
     if type(data) != np.ndarray:
@@ -31,3 +32,15 @@ def plot_mfcc(mfccs):
 	plt.title('MFCC')
 	plt.tight_layout()
 	plt.show()
+
+def plot_model(model: tf.keras.Model, model_name = "model"):
+	if not(isinstance(model, tf.keras.Model)):
+		raise Exception("Model must be instance of tf.keras.Model!")
+
+	tf.keras.utils.plot_model(
+		model,
+		to_file=f"{model_name}.png",
+		show_shapes=True,
+		show_layer_names=True,
+		rankdir='TD'
+	)
