@@ -15,6 +15,7 @@ from models.model_mfcc import Model as Model_mfcc
 from models.model_lstm import Model as Model_lstm
 from models.variational_autoencoder import Autoencoder
 import utils
+from frechet_inception_distance import calculate_fid
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -83,7 +84,7 @@ def load_img(path_to_img):
 	img = tf.image.convert_image_dtype(img, tf.float32)
 	# img = tf.image.rgb_to_grayscale(img)
 
-	new_shape = (56, 56)
+	new_shape = (112, 112)
 
 	img = tf.image.resize(img, new_shape)
 	# img = img[tf.newaxis, :]
@@ -92,7 +93,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	# img = tf.reshape(img, (56 * 56,))
+	# img = tf.reshape(img, (112 * 112,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -115,7 +116,16 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 			path_components = file_path.split("\\")
 			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
 			images.append(load_and_process_img(path_to_img))
-			labels.append(one_hot_encode(n))
+			labels.append(n)
+
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
+		for m, file_path in enumerate(class_file_list):
+			recordings.append(load_recording(file_path, use_mfcc))
+			path_components = file_path.split("\\")
+			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
+			images.append(load_and_process_img(path_to_img))
+			labels.append(n)
+
 
 	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -141,7 +151,7 @@ def create_testing_dataset(batch_size=5, use_mfcc=True):
 			path_components = file_path.split("\\")
 			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
 			images.append(load_and_process_img(path_to_img))
-			labels.append(one_hot_encode(n))
+			labels.append(n)
 
 	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -190,14 +200,14 @@ def grad(model, record_sample, img_tensor, label):
 	return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 def loss(model, record_sample, img_tensor, label):
-	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 56, 56, 3))
+	img_tensor = tf.reshape(tf.cast(img_tensor, tf.float32), (-1, 112, 112, 3))
 	record_sample = tf.cast(record_sample, tf.float32)
 	label = tf.cast(label, tf.float32)
 
 	mean, logvar = model.encode(record_sample, label)
 	z = model.reparameterize(mean, logvar)
-	z_cond = tf.concat([z, label], axis=1)
-	x_logit = model.decode(z_cond)
+	# z_cond = tf.concat([z, label], axis=1)
+	x_logit = model.decode([z, label])
 
 	cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=img_tensor)
 	logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
@@ -242,8 +252,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 				if epoch % 5 == 0:
 					x_logit = model(record_sample, label)
 
-					reconstructed = tf.reshape(x_logit, (-1, 56, 56, 3))
-					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+					reconstructed = tf.reshape(x_logit, (-1, 112, 112, 3))
+					original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 					tf.summary.image('original', original, max_outputs=100, step=epoch)
 					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
@@ -277,23 +287,23 @@ def main(args):
 		shape=[1, 512]
 	)
 
-	vector_for_generation = tf.concat(
-		[random_vector_for_generation, tf.convert_to_tensor([[1,0]], dtype=tf.float32)], 
-		axis=1
-	)
+	# vector_for_generation = tf.concat(
+	# 	[random_vector_for_generation, tf.convert_to_tensor([[1,0]], dtype=tf.float32)], 
+	# 	axis=1
+	# )
 
-	reconstructed = tf.reshape(model.sample(vector_for_generation), (56, 56, 3)).numpy()
-	plt.imshow(reconstructed)
-	plt.show()
+	# reconstructed = tf.reshape(model.decode([random_vector_for_generation, 0]), (112, 112, 3)).numpy()
+	# plt.imshow(reconstructed)
+	# plt.show()
 
-	vector_for_generation = tf.concat(
-		[random_vector_for_generation, tf.convert_to_tensor([[0,1]], dtype=tf.float32)], 
-		axis=1
-	)
+	# vector_for_generation = tf.concat(
+	# 	[random_vector_for_generation, tf.convert_to_tensor([[0,1]], dtype=tf.float32)], 
+	# 	axis=1
+	# )
 
-	reconstructed = tf.reshape(model.sample(vector_for_generation), (56, 56, 3)).numpy()
-	plt.imshow(reconstructed)
-	plt.show()
+	# reconstructed = tf.reshape(model.decode([random_vector_for_generation, 1]), (112, 112, 3)).numpy()
+	# plt.imshow(reconstructed)
+	# plt.show()
 
 
 	plt.figure(figsize=(5, 4))
@@ -301,8 +311,8 @@ def main(args):
 		record_sample = tf.cast(record_sample, tf.float32)
 		label = tf.cast(label, tf.float32)
 
-		reconstructed = tf.reshape(trained_model(record_sample, label), (-1, 56, 56, 3))
-		original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+		reconstructed = tf.reshape(trained_model(record_sample, label), (-1, 112, 112, 3))
+		original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 		reconstructed = reconstructed.numpy()
 		original = original.numpy()
@@ -330,6 +340,7 @@ def main(args):
 		# plt.imshow(np.squeeze(original[0]), cmap='gray')
 		# plt.show()
 
+		calculate_fid(original, reconstructed)
 
 	if args.save_model == True:
 		trained_model.save_weights('./vae_generator.h5')

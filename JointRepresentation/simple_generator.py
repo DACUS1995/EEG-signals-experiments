@@ -14,6 +14,7 @@ from config import Config
 from models.model_mfcc import Model as Model_mfcc
 from models.model_lstm import Model as Model_lstm
 from models.autoencoder import Autoencoder
+from frechet_inception_distance import calculate_fid
 import utils
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -83,7 +84,7 @@ def load_img(path_to_img):
 	img = tf.image.convert_image_dtype(img, tf.float32)
 	# img = tf.image.rgb_to_grayscale(img)
 
-	new_shape = (56, 56)
+	new_shape = (112, 112)
 
 	img = tf.image.resize(img, new_shape)
 	# img = img[tf.newaxis, :]
@@ -92,7 +93,7 @@ def load_img(path_to_img):
 
 def load_and_process_img(path_to_img):
 	img = load_img(path_to_img)
-	# img = tf.reshape(img, (56 * 56,))
+	# img = tf.reshape(img, (112 * 112,))
 	# img = tf.keras.applications.vgg19.preprocess_input(img)
 	return img
 
@@ -108,6 +109,14 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 			path_components = file_path.split("\\")
 			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
 			images.append(load_and_process_img(path_to_img))
+
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
+		for m, file_path in enumerate(class_file_list):
+			recordings.append(load_recording(file_path, use_mfcc))
+			path_components = file_path.split("\\")
+			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
+			images.append(load_and_process_img(path_to_img))
+		
 
 	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -178,8 +187,8 @@ def loss(model, record_sample, img_tensor):
 	img_tensor = tf.cast(img_tensor, tf.float32)
 	record_sample = tf.cast(record_sample, tf.float32)
 
-	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
-	original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+	reconstructed = tf.reshape(model(record_sample), (-1, 112, 112, 3))
+	original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 	reconstruction_error = tf.reduce_mean(tf.square(tf.subtract(reconstructed, original)))
 	return reconstruction_error
@@ -217,8 +226,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 				if epoch % 5 == 0:
 					# Show images from the training dataset
 					record_sample = tf.cast(record_sample, tf.float32)
-					reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
-					original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+					reconstructed = tf.reshape(model(record_sample), (-1, 112, 112, 3))
+					original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 					tf.summary.image('original', original, max_outputs=100, step=epoch)
 					tf.summary.image('reconstructed', reconstructed, max_outputs=100, step=epoch)
@@ -226,8 +235,8 @@ def train(model, *, epochs=5, validation_dataset, train_dataset) -> None:
 					# # Show images from the training dataset
 					# for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset):
 					# 	record_sample = tf.cast(record_sample, tf.float32)
-					# 	reconstructed = tf.reshape(model(record_sample), (-1, 56, 56, 3))
-					# 	original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+					# 	reconstructed = tf.reshape(model(record_sample), (-1, 112, 112, 3))
+					# 	original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 					# 	tf.summary.image('original_validation', original, max_outputs=100, step=epoch)
 					# 	tf.summary.image('reconstructed_validation', reconstructed, max_outputs=100, step=epoch)
@@ -263,8 +272,8 @@ def main(args):
 	for (batch, (record_sample, img_tensor)) in enumerate(validation_dataset.take(5)):
 		record_sample = tf.cast(record_sample, tf.float32)
 
-		reconstructed = tf.reshape(trained_model(record_sample), (-1, 56, 56, 3))
-		original = tf.reshape(img_tensor, (-1, 56, 56, 3))
+		reconstructed = tf.reshape(trained_model(record_sample), (-1, 112, 112, 3))
+		original = tf.reshape(img_tensor, (-1, 112, 112, 3))
 
 		reconstructed = reconstructed.numpy()
 		original = original.numpy()
@@ -287,11 +296,7 @@ def main(args):
 		
 		plt.show()
 
-
-		# plt.imshow(np.squeeze(reconstructed[0]), cmap='gray')
-		# plt.show()
-		# plt.imshow(np.squeeze(original[0]), cmap='gray')
-		# plt.show()
+		calculate_fid(original, reconstructed)
 
 
 	if args.save_model == True:

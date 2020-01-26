@@ -3,6 +3,7 @@ import numpy as np
 from models.model_lstm import Model as Model_lstm
 from config import Config
 
+LABEL_EMBEDDING_SIZE = 50
 
 class Decoder(tf.keras.layers.Layer):
 	def __init__(self, intermediate_dim, original_dim):
@@ -34,12 +35,15 @@ class Autoencoder(tf.keras.Model):
 		latent_encoder.trainable = False
 
 		latent_encoder_input = latent_encoder.layers[0].input
-		conditioning_input = tf.keras.Input(shape=(2,), name="Input_2")
+		conditioning_input = tf.keras.Input(shape=(1,), name="Input_2")
+
+		li = tf.keras.layers.Embedding(2, LABEL_EMBEDDING_SIZE)(conditioning_input)
+		li = tf.keras.layers.Reshape((LABEL_EMBEDDING_SIZE,))(li)
 
 		out_latent_encoder = latent_encoder(latent_encoder_input)
 
 		out = tf.keras.layers.Flatten()(out_latent_encoder)
-		out = tf.keras.layers.Concatenate(axis=1)([out, conditioning_input])
+		out = tf.keras.layers.Concatenate(axis=1)([out, li])
 		out = tf.keras.layers.Dense(intermediate_dim + intermediate_dim)(out)
 
 		self.encoder = tf.keras.Model(inputs=[latent_encoder_input, conditioning_input], outputs=out)
@@ -52,7 +56,7 @@ class Autoencoder(tf.keras.Model):
 
 
 		# self.decoder = Decoder(intermediate_dim=intermediate_dim + 2, original_dim=original_dim)
-		self.decoder = define_generator(intermediate_dim + 2, original_dim)
+		self.decoder = define_generator(intermediate_dim, original_dim)
 
 	@tf.function
 	def sample(self, eps=None, cond=[1, 0]):
@@ -82,8 +86,8 @@ class Autoencoder(tf.keras.Model):
 
 		mean, logvar = self.encode(record_sample, label)
 		z = self.reparameterize(mean, logvar)
-		z = tf.concat([z, label], axis=1)
-		probs = self.decode(z, apply_sigmoid=True)
+		# z = tf.concat([z, label], axis=1)
+		probs = self.decode([z, label], apply_sigmoid=True)
 		return probs
 
 
@@ -91,8 +95,13 @@ class Autoencoder(tf.keras.Model):
 def define_generator(latent_dim, original_dim):
 	# image generator input
 	in_lat = tf.keras.Input(shape=(latent_dim,))
-	
-	gen = tf.keras.layers.Dense(784, activation="relu")(in_lat)
+	in_label = tf.keras.Input(shape=(1,))
+
+	li = tf.keras.layers.Embedding(2, LABEL_EMBEDDING_SIZE)(in_label)
+	li = tf.keras.layers.Reshape((LABEL_EMBEDDING_SIZE,))(li)
+	merge = tf.keras.layers.Concatenate()([in_lat, li])
+
+	gen = tf.keras.layers.Dense(784, activation="relu")(merge)
 
 	# foundation for 7x7 image
 	n_nodes = 128 * 7 * 7
@@ -110,11 +119,15 @@ def define_generator(latent_dim, original_dim):
 	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
 	gen = tf.keras.layers.BatchNormalization()(gen)
 
+	# upsample to 112x112
+	gen = tf.keras.layers.Conv2DTranspose(128, (4,4), strides=(2,2), padding='same', activation="relu")(gen)
+	gen = tf.keras.layers.BatchNormalization()(gen)
+
 	# output
 	out_layer = tf.keras.layers.Conv2D(3, (3,3), padding='same')(gen)
 	# out_layer = Dense(original_dim)(gen)
 	# define model
-	model = tf.keras.Model(inputs=in_lat, outputs=out_layer)
+	model = tf.keras.Model(inputs=[in_lat, in_label], outputs=out_layer)
 	return model
 
 

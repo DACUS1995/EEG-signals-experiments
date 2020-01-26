@@ -15,6 +15,7 @@ from models.model_mfcc import Model as Model_mfcc
 from models.model_lstm import Model as Model_lstm
 from models.dcgan import define_discriminator, define_generator, define_eeg_encoder
 import utils
+from frechet_inception_distance import calculate_fid
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -117,6 +118,16 @@ def create_training_dataset(batch_size=5, shuffle=True, use_mfcc=True):
 			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
 			images.append(load_and_process_img(path_to_img))
 			labels.append(one_hot_encode(n))
+
+
+	for n, class_file_list in enumerate(get_recording_files_paths(mode="testing")):
+		for m, file_path in enumerate(class_file_list):
+			recordings.append(load_recording(file_path, use_mfcc))
+			path_components = file_path.split("\\")
+			path_to_img = "D:\Storage\BrainImages\\" + path_components[5] + "\\" + path_components[6].replace("csv", "jpg")
+			images.append(load_and_process_img(path_to_img))
+			labels.append(one_hot_encode(n))
+
 
 	dataset_img = tf.data.Dataset.from_tensor_slices(images)
 	dataset_recordings = tf.data.Dataset.from_tensor_slices(recordings)
@@ -324,6 +335,9 @@ def main(args):
 			ax.get_yaxis().set_visible(False)
 		
 		plt.show()
+
+		calculate_fid(original, reconstructed)
+
 
 
 if __name__ == "__main__":
