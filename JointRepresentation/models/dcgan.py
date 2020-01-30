@@ -38,7 +38,7 @@ def define_discriminator(in_shape=(112,112,3), in_shape_eeg_features=512):
 
 	merge = tf.keras.layers.Concatenate()([fe, in_features])
 
-	out_layer = tf.keras.layers.Dense(512, activation='sigmoid')(fe)
+	out_layer = tf.keras.layers.Dense(512, activation='sigmoid')(merge)
 	out_layer = tf.keras.layers.Dropout(0.2)(out_layer)
 
 	out_layer = tf.keras.layers.Dense(256, activation='sigmoid')(fe)

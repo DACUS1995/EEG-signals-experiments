@@ -195,6 +195,16 @@ def plot_training_metrics(train_gen_loss_results, train_disc_loss_results):
 	plt.show()
 
 
+def compute_accuracy(real_output, fake_output):
+	real = tf.keras.metrics.BinaryAccuracy()
+	fake = tf.keras.metrics.BinaryAccuracy()
+
+	real.update_state(tf.zeros_like(real_output), real_output)
+	fake.update_state(tf.ones_like(fake_output), fake_output)
+
+	return real.result(), fake.result()
+
+
 @tf.function
 def train_step(
 	images,
@@ -220,12 +230,16 @@ def train_step(
 		gen_loss = generator_loss(fake_output)
 		disc_loss = discriminator_loss(real_output, fake_output)
 
+		real_acc, fake_acc = compute_accuracy(real_output, fake_output)
+
 	gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
 	gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
 
 	generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
 	discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
-	return gen_loss, disc_loss
+
+
+	return gen_loss, disc_loss, real_acc, fake_acc
 
 
 def train(generator, discriminator, *, epochs=5, validation_dataset, train_dataset) -> None:
@@ -245,12 +259,15 @@ def train(generator, discriminator, *, epochs=5, validation_dataset, train_datas
 				epoch_loss_gen_avg = tf.keras.metrics.Mean()
 				epoch_loss_disc_avg = tf.keras.metrics.Mean()
 
+				epoch_acc_true_avg = tf.keras.metrics.Mean()
+				epoch_acc_fake_avg = tf.keras.metrics.Mean()
+
 				start = time.time()
 
 				for (batch, (record_sample, img_tensor, label)) in enumerate(train_dataset):
 					record_sample = eeg_encoder(tf.cast(record_sample, tf.float32))
 
-					gen_loss, disc_loss = train_step(
+					gen_loss, disc_loss, real_acc, fake_acc = train_step(
 						img_tensor,
 						record_sample,
 						batch_size = record_sample.shape[0],
@@ -262,12 +279,18 @@ def train(generator, discriminator, *, epochs=5, validation_dataset, train_datas
 					)
 					epoch_loss_gen_avg(gen_loss)
 					epoch_loss_disc_avg(disc_loss)
+
+					epoch_acc_true_avg(real_acc)
+					epoch_acc_fake_avg(fake_acc)
 				
 				train_gen_loss_results.append(epoch_loss_gen_avg.result())
 				train_disc_loss_results.append(epoch_loss_disc_avg.result())
 
 				tf.summary.scalar('loss gen', epoch_loss_gen_avg.result(), step=epoch)
 				tf.summary.scalar('loss disc', epoch_loss_disc_avg.result(), step=epoch)
+
+				tf.summary.scalar('fake acc', epoch_acc_fake_avg.result(), step=epoch)
+				tf.summary.scalar('real acc', epoch_acc_true_avg.result(), step=epoch)
 				
 				noise = tf.random.normal([record_sample.shape[0], 100])
 				reconstructed = generator([noise, record_sample])
