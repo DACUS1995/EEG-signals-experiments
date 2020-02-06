@@ -199,13 +199,16 @@ def compute_accuracy(real_output, fake_output):
 	real = tf.keras.metrics.BinaryAccuracy()
 	fake = tf.keras.metrics.BinaryAccuracy()
 
+	# print(real_output)
+	# print(fake_output)
+
 	real.update_state(tf.zeros_like(real_output), real_output)
 	fake.update_state(tf.ones_like(fake_output), fake_output)
 
 	return real.result(), fake.result()
 
 
-@tf.function
+# @tf.function
 def train_step(
 	images,
 	record_sample,
