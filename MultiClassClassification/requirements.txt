@@ -46,7 +46,7 @@ tensorflow-gpu==2.3.1
 termcolor==1.1.0
 torch==1.0.1
 torchvision==0.2.1
-urllib3==1.24.1
+urllib3==1.24.2
 websocket-client==0.56.0
 Werkzeug==0.14.1
 wurlitzer==1.0.2
